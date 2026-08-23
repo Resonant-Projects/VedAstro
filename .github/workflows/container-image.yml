@@ -1,0 +1,120 @@
+name: Container image
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - .github/docker/vedastro.Dockerfile
+      - .github/workflows/container-image.yml
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Fork branch, tag, or commit to build
+        required: true
+        default: 92561401c0728bdc925706fa896fbb4b5342b1d7
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: container-image-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE_NAME: ghcr.io/resonant-projects/vedastro
+  STABLE_SOURCE_REF: 92561401c0728bdc925706fa896fbb4b5342b1d7
+
+jobs:
+  build:
+    runs-on: [self-hosted, linux, x64, incus, garm, ephemeral]
+    timeout-minutes: 45
+    steps:
+      - name: Select source revision
+        id: source
+        shell: bash
+        env:
+          REQUESTED_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            echo "ref=$REQUESTED_REF" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=$STABLE_SOURCE_REF" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out trusted build definition
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: build-config
+          persist-credentials: false
+
+      - name: Check out selected fork source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.ref }}
+          path: source
+          persist-credentials: false
+
+      - name: Record exact source commit
+        id: revision
+        working-directory: source
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Supply reproducible historical version metadata
+        shell: bash
+        run: cp build-config/.github/docker/ThisAssembly.cs source/API/ThisAssembly.cs
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: source
+          file: build-config/.github/docker/vedastro.Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.IMAGE_NAME }}:sha-${{ steps.revision.outputs.sha }}
+          build-args: SOURCE_REVISION=${{ steps.revision.outputs.sha }}
+          cache-from: type=gha,scope=vedastro
+          cache-to: type=gha,mode=max,scope=vedastro
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest published image
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Record promotion input
+        if: github.event_name != 'pull_request'
+        env:
+          SOURCE_SHA: ${{ steps.revision.outputs.sha }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo '### VedAstro image'
+            echo
+            echo "Source: \`$GITHUB_REPOSITORY@$SOURCE_SHA\`"
+            echo "Image: \`$IMAGE_NAME:sha-$SOURCE_SHA@$IMAGE_DIGEST\`"
+            echo
+            echo 'Promote the complete digest-pinned reference in homelab-infra.'
+          } >> "$GITHUB_STEP_SUMMARY"
