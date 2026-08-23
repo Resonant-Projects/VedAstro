@@ -16,12 +16,9 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
-  attestations: write
 
 concurrency:
-  group: container-image-${{ github.event_name }}-${{ github.ref }}
+  group: container-image-${{ github.event_name }}-${{ inputs.source_ref || github.event.pull_request.head.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -29,7 +26,57 @@ env:
   STABLE_SOURCE_REF: 92561401c0728bdc925706fa896fbb4b5342b1d7
 
 jobs:
-  build:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: [self-hosted, linux, x64, incus, garm, ephemeral]
+    timeout-minutes: 45
+    steps:
+      - name: Check out exact pull request build definition
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: build-config
+          persist-credentials: false
+
+      - name: Check out stable source baseline
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.STABLE_SOURCE_REF }}
+          path: source
+          persist-credentials: false
+
+      - name: Record exact source commit
+        id: revision
+        working-directory: source
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Supply reproducible historical version metadata
+        shell: bash
+        run: cp build-config/.github/docker/ThisAssembly.cs source/API/ThisAssembly.cs
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Validate container build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: source
+          file: build-config/.github/docker/vedastro.Dockerfile
+          platforms: linux/amd64
+          push: false
+          build-args: SOURCE_REVISION=${{ steps.revision.outputs.sha }}
+          cache-from: type=gha,scope=vedastro
+          provenance: mode=max
+          sbom: true
+
+  publish:
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     runs-on: [self-hosted, linux, x64, incus, garm, ephemeral]
     timeout-minutes: 45
     steps:
@@ -38,13 +85,7 @@ jobs:
         shell: bash
         env:
           REQUESTED_REF: ${{ inputs.source_ref }}
-        run: |
-          set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
-            echo "ref=$REQUESTED_REF" >> "$GITHUB_OUTPUT"
-          else
-            echo "ref=$STABLE_SOURCE_REF" >> "$GITHUB_OUTPUT"
-          fi
+        run: echo "ref=$REQUESTED_REF" >> "$GITHUB_OUTPUT"
 
       - name: Check out trusted build definition
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -74,7 +115,6 @@ jobs:
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
@@ -88,7 +128,7 @@ jobs:
           context: source
           file: build-config/.github/docker/vedastro.Dockerfile
           platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ env.IMAGE_NAME }}:sha-${{ steps.revision.outputs.sha }}
           build-args: SOURCE_REVISION=${{ steps.revision.outputs.sha }}
           cache-from: type=gha,scope=vedastro
@@ -97,7 +137,6 @@ jobs:
           sbom: true
 
       - name: Attest published image
-        if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
         with:
           subject-name: ${{ env.IMAGE_NAME }}
@@ -105,7 +144,6 @@ jobs:
           push-to-registry: true
 
       - name: Record promotion input
-        if: github.event_name != 'pull_request'
         env:
           SOURCE_SHA: ${{ steps.revision.outputs.sha }}
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
