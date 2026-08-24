@@ -88,7 +88,6 @@ namespace Genso.Astrology.Library
         //        {
         //            //get timezone from Google API
         //            var lifeEvtTimeNoTimezone = DateTime.ParseExact(this.StartTime, Time.DateTimeFormatNoTimezone, null);
-        //            _timezone = Tools.GetTimezoneOffsetString(this.Location, lifeEvtTimeNoTimezone, "AIzaSyDqBWCqzU1BJenneravNabDUGIHotMBsgE");
         //        }
 
         //        return _timezone;

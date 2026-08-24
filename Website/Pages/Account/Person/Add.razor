@@ -73,7 +73,14 @@
 
         //auto set correct Timezone based on location & birth date
         var dateTimeOffset = await _timeInput.GetDateTimeOffset(); //offset is ignored here
-        _timeInput.TimeZone = await Tools.GetTimezoneOffsetApi(_geoLocationInput.GetGeoLocation(), dateTimeOffset, ServerManager.GoogleGeoLocationApiKey);
+        var timezoneResult = await Tools.GetTimezoneOffsetApi(_geoLocationInput.GetGeoLocation(), dateTimeOffset);
+        if (!timezoneResult.IsPass)
+        {
+            await _jsRuntime.ShowAlert("error", "Timezone lookup failed. Please check the location and try again.", true);
+            return;
+        }
+
+        _timeInput.TimeZone = timezoneResult.Payload;
 
         //make a new person from the details in the input
         _person = await GetPersonInstanceFromInput();

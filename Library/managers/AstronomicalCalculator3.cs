@@ -1890,7 +1890,8 @@ namespace Genso.Astrology.Library
                 // Convert DOB to ET
                 var jul_day_ET = AstronomicalCalculator.TimeToEphemerisTime(time);
 
-                ephemeris.swe_calc(jul_day_ET, SwissEph.SE_ECL_NUT, 0, x, ref err);
+                var returnCode = ephemeris.swe_calc(jul_day_ET, SwissEph.SE_ECL_NUT, 0, x, ref err);
+                ThrowIfSwissEphError(returnCode, err, "obliquity calculation");
 
                 eps = x[0];
 

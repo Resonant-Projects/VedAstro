@@ -59,6 +59,7 @@ namespace API
                 //validate the the token & get user data
                 var url = $"https://graph.facebook.com/me/?fields=id,name,email&access_token={accessToken}";
                 var reply = await APITools.GetRequest(url);
+                reply.EnsureSuccessStatusCode();
                 var jsonText = await reply.Content.ReadAsStringAsync();
                 var json = JsonNode.Parse(jsonText);
                 var userId = json["id"].ToString();

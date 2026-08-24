@@ -19,6 +19,9 @@ using Microsoft.AspNetCore.Components.WebAssembly.Http;
 using Microsoft.JSInterop;
 using Microsoft.VisualBasic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using GeoTimeZone;
+using TimeZoneConverter;
 using static System.Net.WebRequestMethods;
 using static Genso.Astrology.Library.PlanetName;
 
@@ -30,6 +33,12 @@ namespace Genso.Astrology.Library
     /// </summary>
     public static class Tools
     {
+        private const string DefaultNominatimUrl = "https://nominatim.openstreetmap.org";
+        private const string NominatimUserAgent = "VedAstro-Resonant/1.0 (+https://github.com/Resonant-Projects/VedAstro)";
+        private static readonly HttpClient NominatimClient = CreateNominatimClient();
+        private static readonly SemaphoreSlim NominatimRequestGate = new(1, 1);
+        private static DateTimeOffset _lastNominatimRequestUtc = DateTimeOffset.MinValue;
+
 
         /// <summary>
         /// "H1N1" -> ["H", "1", "N", "1"]
@@ -515,156 +524,101 @@ namespace Genso.Astrology.Library
 
         public static async Task<WebResult<GeoLocation>> AddressToGeoLocation(string address)
         {
-            //create the request url for Google API
-            var apiKey = "AIzaSyDqBWCqzU1BJenneravNabDUGIHotMBsgE";
-            var url = $"https://maps.googleapis.com/maps/api/geocode/xml?key={apiKey}&address={Uri.EscapeDataString(address)}&sensor=false";
+            if (string.IsNullOrWhiteSpace(address)) { return FailedGeoLocationResult(); }
 
-            //get location data from GoogleAPI
-            var webResult = await ReadFromServerXmlReply(url);
+            var url = $"{GetNominatimBaseUrl()}/search?q={Uri.EscapeDataString(address)}&format=jsonv2&limit=1";
 
-            //if fail to make call, end here
-            if (!webResult.IsPass) { return new WebResult<GeoLocation>(false, GeoLocation.Empty); }
+            try
+            {
+                using var response = await SendNominatimRequest(url);
+                if (!response.IsSuccessStatusCode) { return FailedGeoLocationResult(); }
 
-            //if success, get the reply data out
-            var geocodeResponseXml = webResult.Payload;
-            var resultXml = geocodeResponseXml.Element("result");
-            var statusXml = geocodeResponseXml.Element("status");
+                var rawReply = await response.Content.ReadAsStringAsync();
+                var result = JArray.Parse(rawReply).FirstOrDefault() as JObject;
+                if (result == null) { return FailedGeoLocationResult(); }
 
-            //DEBUG
-            //Console.WriteLine(geocodeResponseXml.ToString());
-
-            //check the data, if location was NOT found by google API, end here
-            if (statusXml == null || statusXml.Value == "ZERO_RESULTS") { return new WebResult<GeoLocation>(false, GeoLocation.Empty); }
-
-            //if success, extract out the longitude & latitude
-            var locationElement = resultXml?.Element("geometry")?.Element("location");
-            var lat = double.Parse(locationElement?.Element("lat")?.Value ?? "0");
-            var lng = double.Parse(locationElement?.Element("lng")?.Value ?? "0");
-
-            //round coordinates to 3 decimal places
-            lat = Math.Round(lat, 3);
-            lng = Math.Round(lng, 3);
-
-            //get full name with country & state
-            var fullName = resultXml?.Element("formatted_address")?.Value;
-
-            //return to caller pass
-            return new WebResult<GeoLocation>(true, new GeoLocation(fullName, lng, lat));
+                return ParseNominatimGeoLocation(result);
+            }
+            catch (Exception)
+            {
+                return FailedGeoLocationResult();
+            }
         }
 
         /// <summary>
-        /// gets the name of the place given th coordinates, uses Google API
+        /// Gets the name of a place from its coordinates using Nominatim.
         /// </summary>
-        public static async Task<GeoLocation> CoordinateToGeoLocation(double longitude, double latitude, string apiKey)
+        public static async Task<WebResult<GeoLocation>> CoordinateToGeoLocation(double longitude, double latitude)
         {
-            //create the request url for Google API
-            var url = string.Format($"https://maps.googleapis.com/maps/api/geocode/xml?latlng={latitude},{longitude}&key={apiKey}");
+            if (!AreValidCoordinates(latitude, longitude)) { return FailedGeoLocationResult(); }
 
-            //get location data from GoogleAPI
-            var webResult = await ReadFromServerXmlReply(url);
-            var rawReplyXml = webResult.Payload;
+            var latitudeText = latitude.ToString(CultureInfo.InvariantCulture);
+            var longitudeText = longitude.ToString(CultureInfo.InvariantCulture);
+            var url = $"{GetNominatimBaseUrl()}/reverse?lat={latitudeText}&lon={longitudeText}&format=jsonv2";
 
-            //extract out the longitude & latitude
-            var locationData = new XDocument(rawReplyXml);
-            var localityResult = locationData.Element("GeocodeResponse")?.Elements("result").FirstOrDefault(result => result.Element("type")?.Value == "locality");
-            var locationName = localityResult?.Element("formatted_address")?.Value;
+            try
+            {
+                using var response = await SendNominatimRequest(url);
+                if (!response.IsSuccessStatusCode) { return FailedGeoLocationResult(); }
 
-
-            return new GeoLocation(locationName, longitude, latitude);
+                var rawReply = await response.Content.ReadAsStringAsync();
+                var result = JObject.Parse(rawReply);
+                return ParseNominatimGeoLocation(result);
+            }
+            catch (Exception)
+            {
+                return FailedGeoLocationResult();
+            }
 
         }
 
         /// <summary>
-        /// Given a location & time, will use Google Timezone API
-        /// to get accurate time zone that was/is used
-        /// Must input valid geo location 
-        /// NOTE:
-        /// - offset of timeAtLocation not important
-        /// - googleGeoLocationApiKey needed to work
+        /// Gets the historical UTC offset for a named location at the supplied instant.
         /// </summary>
-        public static async Task<TimeSpan> GetTimezoneOffset(string locationName, DateTimeOffset timeAtLocation, string apiKey)
+        public static async Task<TimeSpan> GetTimezoneOffset(string locationName, DateTimeOffset timeAtLocation)
         {
-            //get geo location first then call underlying method
             var geoLocation = await GeoLocation.FromName(locationName);
-            return Tools.StringToTimezone(await GetTimezoneOffsetApi(geoLocation, timeAtLocation, apiKey));
+            var result = await GetTimezoneOffsetApi(geoLocation, timeAtLocation);
+            if (!result.IsPass) { throw new InvalidOperationException($"Timezone lookup failed for location '{locationName}'."); }
+
+            return Tools.StringToTimezone(result.Payload);
         }
 
-        public static async Task<string> GetTimezoneOffsetString(string locationName, DateTime timeAtLocation, string apiKey)
+        public static async Task<string> GetTimezoneOffsetString(string locationName, DateTime timeAtLocation)
         {
-            //get geo location first then call underlying method
             var geoLocation = await GeoLocation.FromName(locationName);
-            return await GetTimezoneOffsetApi(geoLocation, timeAtLocation, apiKey);
+            var result = GetTimezoneOffsetForLocalTime(geoLocation, timeAtLocation);
+            if (!result.IsPass) { throw new InvalidOperationException($"Timezone lookup failed for location '{locationName}'."); }
+
+            return result.Payload;
         }
 
         public static async Task<string> GetTimezoneOffsetString(string location, string dateTime)
         {
-            //get timezone from Google API
             var lifeEvtTimeNoTimezone = DateTime.ParseExact(dateTime, Time.DateTimeFormatNoTimezone, null);
-            var timezone = await Tools.GetTimezoneOffsetString(location, lifeEvtTimeNoTimezone, "AIzaSyDqBWCqzU1BJenneravNabDUGIHotMBsgE");
-
-            return timezone;
-
-            //get start time of life event and find the position of it in slices (same as now line)
-            //so that this life event line can be placed exactly on the report where it happened
-            //var lifeEvtTimeStr = $"{dateTime} {timezone}"; //add offset 0 only for parsing, not used by API to get timezone
-            //var lifeEvtTime = DateTimeOffset.ParseExact(lifeEvtTimeStr, Time.DateTimeFormat, null);
-
-            //return lifeEvtTime;
+            return await Tools.GetTimezoneOffsetString(location, lifeEvtTimeNoTimezone);
         }
 
         /// <summary>
-        /// Given a location & time, will use Google Timezone API
-        /// to get accurate time zone that was/is used, if Google fail,
-        /// then auto default to system timezone
-        /// NOTE:
-        /// - sometimes unexpected failure to call google by some clients only
-        /// - offset of timeAtLocation not important
-        /// - googleGeoLocationApiKey needed to work
+        /// Gets the historical UTC offset for coordinates at the supplied instant.
         /// </summary>
-        public static async Task<WebResult<string>> GetTimezoneOffsetApi(GeoLocation geoLocation, DateTimeOffset timeAtLocation, string apiKey)
+        public static Task<WebResult<string>> GetTimezoneOffsetApi(GeoLocation geoLocation, DateTimeOffset timeAtLocation)
         {
-            var returnResult = new WebResult<string>();
-
-            //use timestamp to account for historic timezone changes
-            var locationTimeUnix = timeAtLocation.ToUnixTimeSeconds();
             var longitude = geoLocation.GetLongitude();
             var latitude = geoLocation.GetLatitude();
 
-            //create the request url for Google API 
-            //todo get the API key string stored separately (for security reasons)
-            var url = string.Format($@"https://maps.googleapis.com/maps/api/timezone/xml?location={latitude},{longitude}&timestamp={locationTimeUnix}&key={apiKey}");
-
-            //get raw location data from GoogleAPI
-            var apiResult = await ReadFromServerXmlReply(url);
-
-            //if result from API is a failure then use system timezone
-            //this is clearly an error, as such log it
-            TimeSpan offsetMinutes;
-            if (apiResult.IsPass) //all well
+            try
             {
-                //get the raw data from google
-                var timeZoneResponseXml = apiResult.Payload;
+                if (!AreValidCoordinates(latitude, longitude)) { return Task.FromResult(FailedTimezoneResult()); }
 
-                //try parse Google API's payload
-                var isParsed = TryParseGoogleTimeZoneResponse(timeZoneResponseXml, out offsetMinutes);
-                if (!isParsed) { goto Fail; } //not parsed end here
-
-                //convert to string exp: +08:00
-                var parsedOffsetString = Tools.TimeSpanToUTCTimezoneString(offsetMinutes);
-
-                //place data inside capsule
-                returnResult.Payload = parsedOffsetString;
-                returnResult.IsPass = true;
-                return returnResult;
+                var timeZone = GetTimeZoneInfo(latitude, longitude);
+                var offset = timeZone.GetUtcOffset(timeAtLocation);
+                return Task.FromResult(new WebResult<string>(true, TimeSpanToUTCTimezoneString(offset)));
             }
-
-        Fail:
-            //mark as fail & use possibly inaccurate backup timezone (client browser's timezone)
-            returnResult.IsPass = false;
-            offsetMinutes = Tools.GetSystemTimezone();
-            returnResult.Payload = Tools.TimeSpanToUTCTimezoneString(offsetMinutes);
-            return returnResult;
-
+            catch (Exception)
+            {
+                return Task.FromResult(FailedTimezoneResult());
+            }
         }
 
         /// <summary>
@@ -672,64 +626,93 @@ namespace Genso.Astrology.Library
         /// </summary>
         private static string TimeSpanToUTCTimezoneString(TimeSpan offsetMinutes)
         {
-            var x = DateTimeOffset.UtcNow.ToOffset(offsetMinutes).ToString("zzz");
-            return x;
+            return new DateTimeOffset(2000, 1, 1, 0, 0, 0, offsetMinutes).ToString("zzz");
         }
 
-        /// <summary>
-        /// When using google api to get timezone data, the API returns a reply in XML similar to one below
-        /// This function parses this raw XML data from google to TimeSpan data we need
-        /// It also checks for other failures like wrong location name
-        /// Failing when parsing this TimeZoneResponse XML has occurred enough times, for its own method
-        /// </summary>
-        public static bool TryParseGoogleTimeZoneResponse(XElement timeZoneResponseXml, out TimeSpan offsetMinutes)
+        private static WebResult<string> GetTimezoneOffsetForLocalTime(GeoLocation geoLocation, DateTime timeAtLocation)
         {
-            //<?xml version="1.0" encoding="UTF-8"?>
-            //<TimeZoneResponse>
-            //    <status>INVALID_REQUEST </ status >
-            //    < error_message > Invalid request.Invalid 'location' parameter.</ error_message >
-            //</ TimeZoneResponse >
+            var longitude = geoLocation.GetLongitude();
+            var latitude = geoLocation.GetLatitude();
 
-            //extract out the data from google's reply timezone offset
-            var status = timeZoneResponseXml?.Element("status")?.Value ?? "";
-            var failed = status.Contains("INVALID_REQUEST");
-
-            //try process data if did NOT fail so far
-            if (!failed)
+            try
             {
-                double offsetSeconds;
+                if (!AreValidCoordinates(latitude, longitude)) { return FailedTimezoneResult(); }
 
-                //get raw data from XML
-                var rawOffsetData = timeZoneResponseXml?.Element("raw_offset")?.Value;
+                var timeZone = GetTimeZoneInfo(latitude, longitude);
+                var localTime = DateTime.SpecifyKind(timeAtLocation, DateTimeKind.Unspecified);
+                if (timeZone.IsInvalidTime(localTime) || timeZone.IsAmbiguousTime(localTime)) { return FailedTimezoneResult(); }
 
-                //at times google api returns no valid data, but call is replied as normal
-                //so check for that here, if fail end here
-                if (string.IsNullOrEmpty(rawOffsetData)) { goto Fail; }
+                var offset = timeZone.GetUtcOffset(localTime);
+                return new WebResult<string>(true, TimeSpanToUTCTimezoneString(offset));
+            }
+            catch (Exception)
+            {
+                return FailedTimezoneResult();
+            }
+        }
 
-                //try to parse what ever value there is, should be number
-                else
-                {
-                    var isNumber = double.TryParse(rawOffsetData, out offsetSeconds);
-                    if (!isNumber) { goto Fail; } //if not number end here
-                }
+        private static TimeZoneInfo GetTimeZoneInfo(double latitude, double longitude)
+        {
+            var ianaTimeZoneId = TimeZoneLookup.GetTimeZone(latitude, longitude).Result;
+            if (string.IsNullOrWhiteSpace(ianaTimeZoneId)) { throw new TimeZoneNotFoundException(); }
 
-                //offset needs to be "whole" minutes, else fail
-                //purposely hard cast to int to remove not whole minutes
-                var notWhole = TimeSpan.FromSeconds(offsetSeconds).TotalMinutes;
-                offsetMinutes = TimeSpan.FromMinutes((int)Math.Round(notWhole)); //set
+            return TZConvert.GetTimeZoneInfo(ianaTimeZoneId);
+        }
 
-                //let caller know valid data
-                return true;
+        private static HttpClient CreateNominatimClient()
+        {
+            var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(NominatimUserAgent);
+            return client;
+        }
+
+        private static string GetNominatimBaseUrl()
+        {
+            var configuredUrl = Environment.GetEnvironmentVariable("VEDASTRO_NOMINATIM_URL");
+            return (string.IsNullOrWhiteSpace(configuredUrl) ? DefaultNominatimUrl : configuredUrl).TrimEnd('/');
+        }
+
+        private static async Task<HttpResponseMessage> SendNominatimRequest(string url)
+        {
+            await NominatimRequestGate.WaitAsync();
+            try
+            {
+                var elapsed = DateTimeOffset.UtcNow - _lastNominatimRequestUtc;
+                var delay = TimeSpan.FromSeconds(1) - elapsed;
+                if (delay > TimeSpan.Zero) { await Task.Delay(delay); }
+
+                _lastNominatimRequestUtc = DateTimeOffset.UtcNow;
+                return await NominatimClient.GetAsync(url, HttpCompletionOption.ResponseContentRead);
+            }
+            finally
+            {
+                NominatimRequestGate.Release();
+            }
+        }
+
+        private static WebResult<GeoLocation> ParseNominatimGeoLocation(JObject result)
+        {
+            var name = result.Value<string>("display_name");
+            var latitudeText = result.Value<string>("lat");
+            var longitudeText = result.Value<string>("lon");
+
+            var latitudeParsed = double.TryParse(latitudeText, NumberStyles.Float, CultureInfo.InvariantCulture, out var latitude);
+            var longitudeParsed = double.TryParse(longitudeText, NumberStyles.Float, CultureInfo.InvariantCulture, out var longitude);
+            if (string.IsNullOrWhiteSpace(name) || !latitudeParsed || !longitudeParsed || !AreValidCoordinates(latitude, longitude))
+            {
+                return FailedGeoLocationResult();
             }
 
-        //if fail let caller know something went wrong & set to 0s
-        Fail:
-            LibLogger.Error(timeZoneResponseXml);
-            offsetMinutes = TimeSpan.Zero;
-            return false;
-
-
+            return new WebResult<GeoLocation>(true, new GeoLocation(name, longitude, latitude));
         }
+
+        private static bool AreValidCoordinates(double latitude, double longitude) =>
+            !double.IsNaN(latitude) && !double.IsInfinity(latitude) && latitude is >= -90 and <= 90 &&
+            !double.IsNaN(longitude) && !double.IsInfinity(longitude) && longitude is >= -180 and <= 180;
+
+        private static WebResult<GeoLocation> FailedGeoLocationResult() => new(false, GeoLocation.Empty);
+
+        private static WebResult<string> FailedTimezoneResult() => new(false, string.Empty);
 
         /// <summary>
         /// Calls a URL and returns the content of the result as XML
@@ -746,7 +729,12 @@ namespace Genso.Astrology.Library
             try
             {
                 //send request to API server
-                var result = await RequestServerPost(apiUrl);
+                using var result = await RequestServerPost(apiUrl);
+                if (!result.IsSuccessStatusCode)
+                {
+                    returnResult.IsPass = false;
+                    return returnResult;
+                }
 
                 //parse data reply
                 rawMessage = result.Content.ReadAsStringAsync().Result;
@@ -764,7 +752,9 @@ namespace Genso.Astrology.Library
                 try
                 {
                     var rawXml = JsonConvert.DeserializeXmlNode(rawMessage, rootElementName);
-                    var readFromServerXmlReply = XElement.Parse(rawXml?.InnerXml ?? "<Empty/>");
+                    if (rawXml == null) { throw new JsonSerializationException("Server returned an empty JSON payload."); }
+
+                    var readFromServerXmlReply = XElement.Parse(rawXml.InnerXml);
 
                     returnResult.Payload = readFromServerXmlReply;
                     returnResult.IsPass = true; //pass

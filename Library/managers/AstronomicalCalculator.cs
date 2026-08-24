@@ -2127,7 +2127,8 @@ namespace Genso.Astrology.Library
 
             //convert lmt to local apparent time (LAT)
             using SwissEph ephemeris = new();
-            ephemeris.swe_lmt_to_lat(localMeanTimeInJulian_UT, longitude, out localApparentTimeInJulian, ref errorString);
+            var returnCode = ephemeris.swe_lmt_to_lat(localMeanTimeInJulian_UT, longitude, out localApparentTimeInJulian, ref errorString);
+            ThrowIfSwissEphError(returnCode, errorString, "local apparent time conversion");
 
 
             return localApparentTimeInJulian;
@@ -2157,7 +2158,8 @@ namespace Genso.Astrology.Library
                 SwissEph ephemeris = new SwissEph();
 
                 //convert lmt to local apparent time (LAT)
-                ephemeris.swe_lmt_to_lat(localMeanTimeInJulian_UT, longitude, out localApparentTimeInJulian, ref errorString);
+                var returnCode = ephemeris.swe_lmt_to_lat(localMeanTimeInJulian_UT, longitude, out localApparentTimeInJulian, ref errorString);
+                ThrowIfSwissEphError(returnCode, errorString, "local apparent time conversion");
 
                 var localApparentTime = AstronomicalCalculator.ConvertJulianTimeToNormalTime(localApparentTimeInJulian);
 
@@ -2400,6 +2402,7 @@ namespace Genso.Astrology.Library
                 //do calculation for sunrise time
                 using SwissEph ephemeris = new();
                 int ret = ephemeris.swe_rise_trans(julianLmtUtcTime, planet, "", iflag, options, geopos, atpress, attemp, ref riseTimeRaw, ref errorMsg);
+                ThrowIfSwissEphError(ret, errorMsg, "sunrise calculation");
 
 
                 //2. Convert raw sun rise time (julian lmt utc) to normal time (std)
@@ -2456,6 +2459,7 @@ namespace Genso.Astrology.Library
                 //do calculation for sunset time
                 using SwissEph ephemeris = new();
                 int ret = ephemeris.swe_rise_trans(julianLmtUtcTime, planet, "", iflag, options, geopos, atpress, attemp, ref setTimeRaw, ref errorMsg);
+                ThrowIfSwissEphError(ret, errorMsg, "sunset calculation");
 
 
 

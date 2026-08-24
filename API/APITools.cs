@@ -361,28 +361,14 @@ namespace API
 
 
 
-        public static async Task<XElement> FindChartById(XDocument savedChartListXml, string inputChartId)
+        public static Task<XElement> FindChartById(XDocument savedChartListXml, string inputChartId)
         {
-            try
-            {
-                var chartXmlList = savedChartListXml.Root.Elements();
+            var chartXmlList = savedChartListXml.Root?.Elements()
+                ?? throw new InvalidDataException("Saved chart list has no root element.");
+            var foundChart = chartXmlList.FirstOrDefault(chartXml => Chart.FromXml(chartXml).ChartId == inputChartId)
+                ?? throw new KeyNotFoundException($"Saved chart '{inputChartId}' was not found.");
 
-                //Console.WriteLine(savedChartListXml.ToString());
-
-                return chartXmlList.Where(delegate (XElement chartXml)
-                {   //use chart id to find chart record
-                    var thisId = Chart.FromXml(chartXml).ChartId;
-                    return thisId == inputChartId;
-                }).FirstOrDefault(Chart.Empty.ToXml());
-
-
-            }
-            catch (Exception e)
-            {
-                //if fail log it and return empty xelement
-                await APILogger.Error(e, null);
-                return new XElement("Chart");
-            }
+            return Task.FromResult(foundChart);
         }
 
         /// <summary>
@@ -411,32 +397,22 @@ namespace API
 
         public static XElement FindVisitorById(XDocument visitorListXml, string visitorId)
         {
-            try
-            {
-                var uniqueVisitorList = from visitorXml in visitorListXml.Root?.Elements()
-                                        where visitorXml.Element("VisitorId")?.Value == visitorId
-                                        select visitorXml;
-
-                return uniqueVisitorList.FirstOrDefault();
-            }
-            catch (Exception e)
-            {
-                //if fail log it and return empty xelement
-                //todo log failure
-                return new XElement("Visitor");
-            }
+            var visitorElements = visitorListXml.Root?.Elements()
+                ?? throw new InvalidDataException("Visitor list has no root element.");
+            return visitorElements.FirstOrDefault(visitorXml => visitorXml.Element("VisitorId")?.Value == visitorId)
+                ?? throw new KeyNotFoundException($"Visitor '{visitorId}' was not found.");
         }
 
         /// <summary>
         /// Given a id will return parsed person from main list
-        /// Returns empty person if, no person found
+        /// Throws if no person is found.
         /// </summary>
         public static async Task<Person> GetPersonById(string personId)
         {
             var personListXml = await GetPersonListFile();
             var foundPersonXml = await FindPersonById(personListXml, personId);
 
-            if (foundPersonXml == null) { return Person.Empty; }
+            if (foundPersonXml == null) { throw new KeyNotFoundException($"Person '{personId}' was not found."); }
 
             var foundPerson = Person.FromXml(foundPersonXml);
 
@@ -447,28 +423,13 @@ namespace API
         /// Will look for a person in a given list
         /// returns null if no person found
         /// </summary>
-        public static async Task<XElement?> FindPersonById(XDocument personListXmlDoc, string personId)
+        public static Task<XElement?> FindPersonById(XDocument personListXmlDoc, string personId)
         {
-            try
-            {
-                //list of person XMLs
-                var personXmlList = personListXmlDoc.Root?.Elements();
+            var personXmlList = personListXmlDoc.Root?.Elements()
+                ?? throw new InvalidDataException("Person list has no root element.");
+            var foundPerson = personXmlList.FirstOrDefault(personXml => Person.FromXml(personXml).Id == personId);
 
-                //do the finding
-                var foundPerson = personXmlList?.Where(delegate (XElement personXml)
-                {   //use id to find the person's record
-                    var thisId = Person.FromXml(personXml).Id;
-                    return thisId == personId;
-                }).First();
-
-                return foundPerson;
-            }
-            catch (Exception e)
-            {
-                //if fail log it and return empty xelement
-                await APILogger.Error(e);
-                return null;
-            }
+            return Task.FromResult(foundPerson);
         }
 
         /// <summary>
@@ -665,26 +626,16 @@ namespace API
                 //initialize empty list of event to return
                 List<HoroscopePrediction> horoscopeList = new();
 
-                try
+                foreach (var horoscopeData in horoscopeDataList)
                 {
-                    foreach (var horoscopeData in horoscopeDataList)
+                    //only add if occuring
+                    var isOccuring = horoscopeData.IsEventOccuring(person.BirthTime, person);
+                    if (isOccuring)
                     {
-                        //only add if occuring
-                        var isOccuring = horoscopeData.IsEventOccuring(person.BirthTime, person);
-                        if (isOccuring)
-                        {
-                            var newHoroscopePrediction = new HoroscopePrediction(horoscopeData.Name, horoscopeData.Description, horoscopeData.RelatedBody);
-                            //add events to main list of event
-                            horoscopeList.Add(newHoroscopePrediction);
-                        }
+                        var newHoroscopePrediction = new HoroscopePrediction(horoscopeData.Name, horoscopeData.Description, horoscopeData.RelatedBody);
+                        //add events to main list of event
+                        horoscopeList.Add(newHoroscopePrediction);
                     }
-
-                }
-                //catches only exceptions that indicates that user canceled the calculation (caller lost interest in the result)
-                catch (Exception)
-                {
-                    //return empty list
-                    return new List<HoroscopePrediction>();
                 }
 
 

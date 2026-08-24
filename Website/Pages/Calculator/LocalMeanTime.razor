@@ -60,7 +60,7 @@
         <IconButton ButtonText="Calculate" IconName="ep:refresh" OnClickCallback="OnClickCalcLmtToStd"></IconButton>
     </div>
     <div class="tab-pane fade" id="calc4">
-        <p>Uses Google API to get the standard timezone offset used at location, at a point in time</p>
+        <p>Uses the offline time zone database to get the standard timezone offset used at a location and point in time.</p>
         <h5>Offset (UTC/GMT): @_timezoneOffsetOutput</h5>
         <div class="input-group mb-3">
             <span class="input-group-text">STD Time</span>
@@ -117,10 +117,17 @@
         _stdString2 = std.ToString(Time.DateTimeFormat);
     }
 
-    private async void OnClickCalcLocationToOffset()
+    private async Task OnClickCalcLocationToOffset()
     {
-        //gets timezone data from Google API & display to user
-        _timezoneOffsetOutput = await Tools.GetTimezoneOffsetString(_locationNameInput, _stdTimeInput);
+        try
+        {
+            _timezoneOffsetOutput = await Tools.GetTimezoneOffsetString(_locationNameInput, _stdTimeInput);
+        }
+        catch (Exception)
+        {
+            _timezoneOffsetOutput = "Lookup failed";
+            await _jsRuntime.ShowAlert("error", "Timezone lookup failed. Please check the location and time.", true);
+        }
     }
 
     private void OnClickCalcLMTOffset()

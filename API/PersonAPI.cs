@@ -56,7 +56,11 @@ namespace API
                 //note: inside new person xml already contains user id
                 var rootXml = await APITools.ExtractDataFromRequest(incomingRequest);
                 var userId = rootXml.Element("UserId")?.Value;
-                var visitorId = rootXml.Element("VisitorId")?.Value ?? "";
+                var visitorId = rootXml.Element("VisitorId")?.Value;
+                if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(visitorId))
+                {
+                    throw new FormatException("UserId and VisitorId are required.");
+                }
 
                 //find all person's with inputed visitor ID
                 var personListXmlDoc = await APITools.GetXmlFileFromAzureStorage(APITools.PersonListFile, APITools.BlobContainerName);
@@ -106,6 +110,7 @@ namespace API
                 //get the person record by hash
                 var personListXml = await APITools.GetXmlFileFromAzureStorage(APITools.PersonListFile, APITools.BlobContainerName);
                 var foundPerson = await APITools.FindPersonById(personListXml, personId);
+                if (foundPerson == null) { throw new KeyNotFoundException($"Person '{personId}' was not found."); }
 
                 //send person to caller
                 return APITools.PassMessage(foundPerson, incomingRequest);

@@ -14,7 +14,6 @@ namespace Website
     {
 
         //TODO HIDE API
-        public const string GoogleGeoLocationApiKey = "AIzaSyDqBWCqzU1BJenneravNabDUGIHotMBsgE";
 
 
         //PUBLIC METHODS

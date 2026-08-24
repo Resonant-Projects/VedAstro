@@ -497,7 +497,9 @@ namespace API
 
                 //make a name & id only xml list of saved charts
                 //note: done so to not download what is not needed
-                var savedChartXmlList = savedChartXmlDoc?.Root?.Elements().ToList() ?? new List<XElement>(); //empty list so no failure
+                var savedChartRoot = savedChartXmlDoc?.Root
+                    ?? throw new InvalidDataException("Saved chart list has no root element.");
+                var savedChartXmlList = savedChartRoot.Elements().ToList();
                 foreach (var chartXml in savedChartXmlList)
                 {
                     var parsedChart = Chart.FromXml(chartXml);
@@ -584,7 +586,13 @@ namespace API
             var startTime = Time.FromXml(startTimeXml);
             var endTimeXml = rootXml.Element("EndTime")?.Elements().First();
             var endTime = Time.FromXml(endTimeXml);
-            var daysPerPixel = double.Parse(rootXml.Element("DaysPerPixel")?.Value ?? "0");
+            var daysPerPixelText = rootXml.Element("DaysPerPixel")?.Value
+                ?? throw new FormatException("DaysPerPixel is required.");
+            if (!double.TryParse(daysPerPixelText, out var daysPerPixel) ||
+                double.IsNaN(daysPerPixel) || double.IsInfinity(daysPerPixel) || daysPerPixel <= 0)
+            {
+                throw new FormatException("DaysPerPixel must be a positive finite number.");
+            }
 
 
             //get the person instance by id

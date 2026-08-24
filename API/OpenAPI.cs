@@ -41,6 +41,7 @@ namespace API
                 case "Declination": returnVal = AstronomicalCalculator.GetPlanetDeclination(planetName, parsedTime).ToString(); break;
                 case "AspectingPlanets": returnVal = AstronomicalCalculator.GetPlanetsAspectingPlanet(parsedTime, planetName).ToString(); break;
                 case "Motion": returnVal = AstronomicalCalculator.GetPlanetMotionName(planetName, parsedTime).ToString(); break;
+                default: return APITools.FailMessage($"Unknown planet property '{propertyName}'.", incomingRequest);
             }
 
 
@@ -83,6 +84,7 @@ namespace API
                             case "Nirayana": returnVal = AstronomicalCalculator.GetPlanetNirayanaLongitude(parsedTime, planetName).ToString(); break;
                             case "Movable":
                             case "Sayana": returnVal = AstronomicalCalculator.GetPlanetSayanaLongitude(parsedTime, planetName).ToString(); break;
+                            default: return APITools.FailMessage($"Unknown longitude property '{propertyName2}'.", incomingRequest);
                         }
                         break;
                     }
@@ -110,9 +112,11 @@ namespace API
 
                             case "Aspect":
                             case "Drik": returnVal = AstronomicalCalculator.GetPlanetDrikBala(planetName, parsedTime).ToString(); break;
+                            default: return APITools.FailMessage($"Unknown strength property '{propertyName2}'.", incomingRequest);
                         }
                         break;
                     }
+                default: return APITools.FailMessage($"Unknown planet property group '{propertyName1}'.", incomingRequest);
 
             }
 

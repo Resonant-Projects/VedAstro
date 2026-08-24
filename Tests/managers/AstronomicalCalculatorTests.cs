@@ -1,11 +1,71 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Threading.Tasks;
 
 namespace Genso.Astrology.Library.Tests
 {
     [TestClass()]
     public class AstronomicalCalculatorTests
     {
+        [DataTestMethod]
+        [DataRow("00:00 01/01/2000 +00:00", 23.85)]
+        [DataRow("00:00 01/01/2026 +00:00", 24.21)]
+        public void GetAyanamsaReturnsLahiriReferenceValue(string timeText, double expectedDegrees)
+        {
+            var greenwich = new GeoLocation("Greenwich", 0, 0);
+            var time = new Time(timeText, greenwich);
+
+            var actualDegrees = AstronomicalCalculator.GetAyanamsa(time).TotalDegrees;
+
+            Assert.AreEqual(expectedDegrees, actualDegrees, 0.01);
+        }
+
+        [TestMethod]
+        public void GetAyanamsaChangesWithinCalendarYear()
+        {
+            var greenwich = new GeoLocation("Greenwich", 0, 0);
+            var january = new Time("00:00 01/01/2026 +00:00", greenwich);
+            var july = new Time("00:00 01/07/2026 +00:00", greenwich);
+
+            var januaryAyanamsa = AstronomicalCalculator.GetAyanamsa(january).TotalDegrees;
+            var julyAyanamsa = AstronomicalCalculator.GetAyanamsa(july).TotalDegrees;
+
+            Assert.AreNotEqual(januaryAyanamsa, julyAyanamsa);
+        }
+
+        [TestMethod]
+        public async Task AddressToGeoLocationFailsClosedWhenNominatimIsUnreachable()
+        {
+            var originalUrl = Environment.GetEnvironmentVariable("VEDASTRO_NOMINATIM_URL");
+            Environment.SetEnvironmentVariable("VEDASTRO_NOMINATIM_URL", "http://127.0.0.1:1");
+
+            try
+            {
+                var result = await Tools.AddressToGeoLocation("Sydney, Australia");
+
+                Assert.IsFalse(result.IsPass);
+                Assert.AreEqual(GeoLocation.Empty, result.Payload);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("VEDASTRO_NOMINATIM_URL", originalUrl);
+            }
+        }
+
+        [DataTestMethod]
+        [DataRow("2020-06-15T00:00:00+00:00", "+10:00")]
+        [DataRow("2020-12-15T00:00:00+00:00", "+11:00")]
+        public async Task GetTimezoneOffsetApiReturnsHistoricalSydneyOffset(string instantText, string expectedOffset)
+        {
+            var sydney = new GeoLocation("Sydney", 151.2093, -33.8688);
+            var instant = DateTimeOffset.Parse(instantText);
+
+            var result = await Tools.GetTimezoneOffsetApi(sydney, instant);
+
+            Assert.IsTrue(result.IsPass);
+            Assert.AreEqual(expectedOffset, result.Payload);
+        }
+
         [TestMethod()]
         public void GetPlanetRasiSignTest()
         {

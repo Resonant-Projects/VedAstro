@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -58,7 +59,9 @@ namespace API
                 //                        select visitorXml;
 
                 //convert list to nice string before sending to caller
-                var visitorLogXmlString = visitorLogXml?.Root?.ToString(SaveOptions.DisableFormatting) ?? "<Empty/>";
+                var visitorLogRoot = visitorLogXml?.Root
+                    ?? throw new InvalidDataException("Visitor log has no root element.");
+                var visitorLogXmlString = visitorLogRoot.ToString(SaveOptions.DisableFormatting);
                 return APITools.PassMessage(visitorLogXmlString, incomingRequest);
 
             }

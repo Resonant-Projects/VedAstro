@@ -45,7 +45,6 @@
 
 @code {
     //FIELDS
-    const string DefaultLocationCountry = "Singapore";
     private ElementReference _locationNameInput;
     private ElementReference _longitudeInput;
     private ElementReference _latitudeInput;
@@ -227,24 +226,16 @@
     /// </summary>
     private async Task SetCoordinatesFromNameInput()
     {
-        const string defaultLocationCountry = "Singapore";
-
-
-    TryAgain:
         var results = await Tools.AddressToGeoLocation(LocationName);
 
-        //if fail, show message -> set default country -> try again
+        //if fail, show message and invalidate any stale coordinates
         if (!results.IsPass)
         {
-            //alert user first with the wrong name
             var msg = $"The location \"{LocationName}\", not found!" +
                       $"\n Check spelling or try other nearby place.";
             await _jsRuntime.ShowAlert("error", msg, true);
-
-            //change to default location & try again to get coordinates
-            LocationName = defaultLocationCountry;
-            goto TryAgain;
-
+            ClearCoordinates();
+            return;
         }
 
         //update user typed location name to proper formatted one
@@ -269,30 +260,38 @@
             Longitude = (double)locationCoordinates.Longitude;
             Latitude = (double)locationCoordinates.Latitude;
 
-            //if no location data available set default location
+            //if no location data is available, leave the fields invalid for manual entry
             //will return 0 when permission not given
-            if (Longitude == 0 && Latitude == 0) { goto SetDefault; }
+            if (Longitude == 0 && Latitude == 0)
+            {
+                ClearCoordinates();
+                return;
+            }
 
             //set gotten location name into view
-            var geoLocation = await Tools.CoordinateToGeoLocation((double)locationCoordinates.Longitude, (double)locationCoordinates.Latitude, ServerManager.GoogleGeoLocationApiKey);
-            LocationName = geoLocation.GetName();
+            var geoLocationResult = await Tools.CoordinateToGeoLocation((double)locationCoordinates.Longitude, (double)locationCoordinates.Latitude);
+            if (!geoLocationResult.IsPass)
+            {
+                await _jsRuntime.ShowAlert("error", "Unable to resolve your coordinates to a location. Please enter a location manually.", true);
+                ClearCoordinates();
+                return;
+            }
+
+            LocationName = geoLocationResult.Payload.GetName();
 
             //exit
             return;
         }
         catch (Exception)
         {
-            //if errors occur, set default name
+            ClearCoordinates();
         }
+    }
 
-
-    SetDefault:
-        //if fail set default location name
-        LocationName = DefaultLocationCountry;
-
-        //update coordinates based on name
-        await SetCoordinatesFromNameInput();
-
-
+    private void ClearCoordinates()
+    {
+        _longitude = null;
+        _latitude = null;
+        IsLatitudeLongitudeDirty = false;
     }
 }

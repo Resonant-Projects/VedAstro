@@ -327,7 +327,14 @@
             //note: auto timezone checked first, so that Google TimeZone API is not called until needed
             if (autoTimeZoneUsed)
             {
-                var birthLocationTimezone = await Tools.GetTimezoneOffsetApi(_geoLocationInput.GetGeoLocation(), parsedInputTime, ServerManager.GoogleGeoLocationApiKey);
+                var timezoneResult = await Tools.GetTimezoneOffsetApi(_geoLocationInput.GetGeoLocation(), parsedInputTime);
+                if (!timezoneResult.IsPass)
+                {
+                    await _jsRuntime.ShowAlert("error", "Timezone lookup failed. Please check the location and try again.", true);
+                    return false;
+                }
+
+                var birthLocationTimezone = timezoneResult.Payload;
                 var currentTimezone = _timeInput.TimeZone;
                 var timezoneNotMatch = birthLocationTimezone != currentTimezone;
                 if (timezoneNotMatch)

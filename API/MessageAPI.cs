@@ -46,12 +46,18 @@ namespace API
                 //get new message data out of incoming request
                 //note: inside new person xml already contains user id
                 var newMessageXml = await APITools.ExtractDataFromRequest(incomingRequest);
+                var fromEmail = newMessageXml.Element("Email")?.Value;
+                var messageText = newMessageXml.Element("Text")?.Value;
+                if (string.IsNullOrWhiteSpace(fromEmail) || string.IsNullOrWhiteSpace(messageText))
+                {
+                    throw new FormatException("Email and Text are required.");
+                }
 
                 //add new message to main list
                 await APITools.AddXElementToXDocumentAzure(newMessageXml, APITools.MessageListFile, APITools.BlobContainerName);
 
                 //notify admin
-                await SendMessageToSlack(newMessageXml.Element("Email")?.Value ?? "Empty", newMessageXml.Element("Text")?.Value ?? "Empty");
+                await SendMessageToSlack(fromEmail, messageText);
 
                 return APITools.PassMessage(incomingRequest);
 
@@ -109,6 +115,7 @@ namespace API
             var response = await httpClient.PostAsync(SlackUserMessageWebHook, content);
 
             var responseData = await response.Content.ReadAsStringAsync();
+            response.EnsureSuccessStatusCode();
 
             Console.WriteLine(responseData);
             //return responseData;

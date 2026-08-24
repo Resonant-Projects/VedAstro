@@ -9,6 +9,16 @@ namespace Genso.Astrology.Library
 {
     public static partial class AstronomicalCalculator
     {
+        private const int AyanamsaSiderealMode = SwissEph.SE_SIDM_LAHIRI;
+
+        private static void ThrowIfSwissEphError(int returnCode, string errorMessage, string operation)
+        {
+            if (returnCode < 0)
+            {
+                throw new InvalidOperationException($"Swiss Ephemeris {operation} failed: {errorMessage}");
+            }
+        }
+
         #region Cached Functions
         //CACHED FUNCTIONS
         //NOTE : These are functions that don't call other functions from this class
@@ -25,11 +35,13 @@ namespace Genso.Astrology.Library
             //UNDERLYING FUNCTION
             Angle _getAyanamsa()
             {
-                int year = LmtToUtc(time).Year;
+                var ephemeris = new SwissEph();
+                ephemeris.swe_set_sid_mode(AyanamsaSiderealMode, 0, 0);
 
-                var returnValue = new Angle(seconds: (long)(Math.Round((year - 397) * 50.3333333333)));
+                var julianDayUt = TimeToJulianDay(time);
+                var ayanamsaDegrees = ephemeris.swe_get_ayanamsa_ut(julianDayUt);
 
-                return returnValue;
+                return new Angle(degrees: ayanamsaDegrees);
             }
 
         }
@@ -48,6 +60,8 @@ namespace Genso.Astrology.Library
 
             Angle _getPlanetSayanaLongitude()
             {
+                if (planetName is null) { throw new ArgumentNullException(nameof(planetName)); }
+
                 //Converts LMT to UTC (GMT)
                 //DateTimeOffset utcDate = lmtDateTime.ToUniversalTime();
 
@@ -101,6 +115,7 @@ namespace Genso.Astrology.Library
 
                 //Get planet long
                 int ret_flag = ephemeris.swe_calc(jul_day_ET, planet, iflag, results, ref err_msg);
+                ThrowIfSwissEphError(ret_flag, err_msg, "longitude calculation");
 
                 //data in results at index 0 is longitude
                 return new Angle(degrees: results[0]);
@@ -121,6 +136,8 @@ namespace Genso.Astrology.Library
 
             Angle _getPlanetSayanaLatitude()
             {
+                if (planetName is null) { throw new ArgumentNullException(nameof(planetName)); }
+
                 //Converts LMT to UTC (GMT)
                 //DateTimeOffset utcDate = lmtDateTime.ToUniversalTime();
 
@@ -173,6 +190,7 @@ namespace Genso.Astrology.Library
 
                 //Get planet long
                 int ret_flag = ephemeris.swe_calc(jul_day_ET, planet, iflag, results, ref err_msg);
+                ThrowIfSwissEphError(ret_flag, err_msg, "latitude calculation");
 
                 //data in results at index 1 is latitude
                 return new Angle(degrees: results[1]);
@@ -184,6 +202,8 @@ namespace Genso.Astrology.Library
 
         public static double GetPlanetSpeed(Time time, PlanetName planetName)
         {
+            if (planetName is null) { throw new ArgumentNullException(nameof(planetName)); }
+
             //Converts LMT to UTC (GMT)
             //DateTimeOffset utcDate = lmtDateTime.ToUniversalTime();
 
@@ -236,6 +256,7 @@ namespace Genso.Astrology.Library
 
             //Get planet long
             int ret_flag = ephemeris.swe_calc(jul_day_ET, planet, iflag, results, ref err_msg);
+            ThrowIfSwissEphError(ret_flag, err_msg, "speed calculation");
 
             //data in results at index 3 is speed in right ascension (deg/day)
             return results[3];
@@ -1463,7 +1484,8 @@ namespace Genso.Astrology.Library
                 //we have to supply ascmc to make the function run
                 double[] ascmc = new double[10];
 
-                swissEph.swe_houses(jul_day_UT, location.GetLatitude(), location.GetLongitude(), 'P', cusps, ascmc);
+                var returnCode = swissEph.swe_houses(jul_day_UT, location.GetLatitude(), location.GetLongitude(), 'P', cusps, ascmc);
+                ThrowIfSwissEphError(returnCode, string.Empty, "house calculation");
 
                 //we only return cusps, cause that is what is used for now
                 return cusps;
