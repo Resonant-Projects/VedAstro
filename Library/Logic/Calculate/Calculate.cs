@@ -199,9 +199,11 @@ namespace VedAstro.Library
         {
             //# get full person copy to place in recycle bin
             //query the database
-            var foundCalls = AzureTable.PersonList?.Query<PersonListEntity>(row => row.PartitionKey == ownerId && row.RowKey == personId);
+            var foundCalls = AzureTable.PersonList.Query<PersonListEntity>(row => row.PartitionKey == ownerId && row.RowKey == personId);
             //make into readable format
-            var personAzureRow = foundCalls?.FirstOrDefault();
+            var personAzureRow = foundCalls.FirstOrDefault();
+            if (personAzureRow is null) { return "Not found!"; }
+
             var personToDelete = Person.FromAzureRow(personAzureRow);
 
             //# delete data related to person (NOT USER, PERSON PROFILE)
@@ -1028,16 +1030,8 @@ namespace VedAstro.Library
 
         public static Angle PunyaSahamLongitude(Time birthTime)
         {
-            //STEP 1:
-            //in order to find the Punya Saham deduct
-            //the Sun's longitude from the Moon's (if the year
-            //commences during daytime or vice versa if during the
-            //night) and add the ascendant
-            var moonLong = Calculate.PlanetNirayanaLongitude(Moon, birthTime).TotalDegrees; //A
-            var sunLong = Calculate.PlanetNirayanaLongitude(Sun, birthTime).TotalDegrees; //B
-            var tajakaBirth = Calculate.TajikaDateForYear(birthTime, 205);
-
-            return Angle.Degrees180;
+            throw new NotImplementedException(
+                "Punya Saham has no complete first-party implementation in the recoverable source history.");
 
         }
 
@@ -2329,10 +2323,9 @@ namespace VedAstro.Library
         /// </summary>
         public static Time NextNewMoon(Time inputTime)
         {
-            //scan till find
-            //start with input time
             var newMoonTime = inputTime;
-            while (true)
+            const int halfHourStepsInTwoLunarMonths = 60 * 24 * 2;
+            for (var step = 0; step <= halfHourStepsInTwoLunarMonths; step++)
             {
                 //if conjunction, than new moon dectected
                 var conjunctAngle = SunMoonConjunctionAngle(newMoonTime);
@@ -2348,7 +2341,8 @@ namespace VedAstro.Library
                 newMoonTime = newMoonTime.AddHours(0.5);
             }
 
-            return newMoonTime;
+            throw new InvalidOperationException(
+                $"No new Moon conjunction was found within 60 days after {inputTime}.");
         }
 
         /// <summary>
@@ -2358,10 +2352,9 @@ namespace VedAstro.Library
         /// </summary>
         public static Time PreviousNewMoon(Time inputTime)
         {
-            //scan till find
-            //start with input time
             var newMoonTime = inputTime;
-            while (true)
+            const int halfHourStepsInTwoLunarMonths = 60 * 24 * 2;
+            for (var step = 0; step <= halfHourStepsInTwoLunarMonths; step++)
             {
                 //if conjunction, than new moon dectected
                 var conjunctAngle = SunMoonConjunctionAngle(newMoonTime);
@@ -2376,6 +2369,9 @@ namespace VedAstro.Library
                 //go backward in time since did not find 0 degree conjunction
                 newMoonTime = newMoonTime.SubtractHours(0.5);
             }
+
+            throw new InvalidOperationException(
+                $"No new Moon conjunction was found within 60 days before {inputTime}.");
         }
 
         /// <summary>
@@ -5112,9 +5108,6 @@ namespace VedAstro.Library
         /// </summary>
         public static bool IsPlanetYogakarakaToLagna(PlanetName planetName, ZodiacName lagna)
         {
-            //handle empty
-            return false;
-
             switch (lagna)
             {
                 case ZodiacName.Aries:
@@ -5423,7 +5416,7 @@ namespace VedAstro.Library
 
         /// <summary>
         /// Used for judging dasa good or bad, Bala book pg 110
-        /// output range -5 to 5
+        /// output range -4 to 4
         /// </summary>
         public static double PlanetIshtaKashtaScoreDegree(PlanetName planet, Time birthTime)
         {
@@ -9543,26 +9536,9 @@ namespace VedAstro.Library
         /// </summary>
         public static PlanetMotion PlanetMotionName(PlanetName planetName, Time time)
         {
-            return PlanetMotion.Direct; //RETURN DUMMY DATA
-
-            ////sun, moon, rahu & ketu don' have retrograde so always direct
-            //if (planetName == Library.PlanetName.Sun || planetName == Library.PlanetName.Moon || planetName == Library.PlanetName.Rahu || planetName == Library.PlanetName.Ketu) { return PlanetMotion.Direct; }
-
-            ////get chestaBala
-            //var chestaBala = Calculate.PlanetChestaBala(planetName, time).ToDouble();
-
-            ////based on chesta bala assign name to it
-            ////Chesta kendra = 180 degrees = Retrograde
-            //switch (chestaBala)
-            //{
-            //    case <= 60 and > 45: return PlanetMotion.Retrograde;
-            //    case <= 45 and > 15: return PlanetMotion.Direct;
-            //    case <= 15 and >= 0: return PlanetMotion.Stationary;
-            //    default:
-            //        throw new Exception($"Error in GetPlanetMotionName : {chestaBala}");
-            //}
-
-            throw new NotImplementedException();
+            return IsPlanetRetrograde(planetName, time)
+                ? PlanetMotion.Retrograde
+                : PlanetMotion.Direct;
         }
 
         ///// <summary>
@@ -9636,7 +9612,6 @@ namespace VedAstro.Library
         /// </summary>
         public static bool IsPlanetRetrograde(PlanetName planetName, Time time)
         {
-            bool retro = false;
             //if planet is Sun or Moon than default retrograde is off
             if (planetName.Name == PlanetNameEnum.Sun || planetName.Name == PlanetNameEnum.Moon) { return false; }
 
@@ -9650,40 +9625,10 @@ namespace VedAstro.Library
             var nextDay = time.AddHours(24);
             var nextDayLong = PlanetNirayanaLongitude(planetName, nextDay);
 
-            var dayplus2 = time.AddHours(48);
-            var dayplus2Long = PlanetNirayanaLongitude(planetName, dayplus2);
-
-            var dayplus3 = time.AddHours(72);
-            var dayplus3Long = PlanetNirayanaLongitude(planetName, dayplus3);
-            //Console.WriteLine("Long: {0} {1} {2} {3}", dayplus3Long.TotalDegrees, dayplus2Long.TotalDegrees, nextDayLong.TotalDegrees, checkTimeLong.TotalDegrees);
-
-            if (nextDayLong <= checkTimeLong)
-            {
-                //check if the next day long is less than checktimelong because its crossing over 0.00 - this is not a retro condition
-                if ((checkTimeLong.TotalDegrees >= 355.00 && checkTimeLong.TotalDegrees <= 360.00) && (nextDayLong.TotalDegrees >= 0.00 && nextDayLong.TotalDegrees <= 5.00))
-                {
-                    retro = false;
-                }
-                else
-                {
-                    retro = true;
-                }
-            }
-            if (nextDayLong >= checkTimeLong)
-            {
-                //check if the next day long is more than checktimelong because its reverse crossing over 0.00 - this is a retro condition
-                if ((checkTimeLong.TotalDegrees >= 0.00 && checkTimeLong.TotalDegrees <= 5.00) && (nextDayLong.TotalDegrees >= 355.00 && nextDayLong.TotalDegrees <= 0.00))
-                {
-                    retro = true;
-
-                }
-                else
-                {
-                    retro = false;
-
-                }
-            }
-            return retro;
+            // Normalize the daily change to the signed shortest arc so crossing
+            // 0 degrees cannot be mistaken for a change of direction.
+            var dailyChange = (nextDayLong.TotalDegrees - checkTimeLong.TotalDegrees + 540d) % 360d - 180d;
+            return dailyChange < 0;
         }
 
 

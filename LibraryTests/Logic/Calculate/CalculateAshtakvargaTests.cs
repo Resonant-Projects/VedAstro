@@ -62,7 +62,7 @@ namespace VedAstro.Library.Tests
         }
 
         [TestMethod()]
-        public void SunAshtakavargaYoga3Test()
+        public void SunAshtakavargaYoga3RejectsChartWithoutSunAsLagnaLord()
         {
             //In the horoscope of "Roosevelt" the Sun, as lord of Lagna, is in Lagna,
             //associated with 5 bindus. According to classical texts, such a disposition

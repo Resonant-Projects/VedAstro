@@ -223,20 +223,21 @@ namespace VedAstro.Library
 
         public static bool IsPlanetInHouseKP(Dictionary<HouseName, Angle> cusps, Angle planetNirayanaDegrees, HouseName house)
         {
-            //get house number
+            //HouseName is one-based; House12 wraps to the first cusp.
             var houseNumber = (int)house;
-            // Check if houseNumber is within the bounds of the array
-            if (houseNumber >= 0 && houseNumber < cusps.Count)
+            if (houseNumber >= (int)HouseName.House1 &&
+                houseNumber <= (int)HouseName.House12 &&
+                cusps.ContainsKey(house))
             {
                 //check if cusp longitude is smaller than next cusp longitude
-                if (houseNumber + 1 < cusps.Count && cusps[(HouseName)houseNumber + 1] > cusps[(HouseName)houseNumber])
+                if (houseNumber < (int)HouseName.House12 && cusps[(HouseName)houseNumber + 1] > cusps[(HouseName)houseNumber])
                 {
                     return (planetNirayanaDegrees.TotalDegrees >= cusps[(HouseName)houseNumber].TotalDegrees) &&
                            //this means that the planet falls in between these house cusps
                            (planetNirayanaDegrees.TotalDegrees <= cusps[(HouseName)houseNumber + 1].TotalDegrees);
                 }
                 //if next cusp start long is smaller than current cusp we are rotating through 360 deg
-                else if (houseNumber + 1 < cusps.Count)
+                else if (houseNumber < (int)HouseName.House12)
                 {
                     return (planetNirayanaDegrees.TotalDegrees >= cusps[(HouseName)houseNumber].TotalDegrees) ||
                            (planetNirayanaDegrees.TotalDegrees <= cusps[(HouseName)houseNumber + 1].TotalDegrees);
@@ -244,7 +245,8 @@ namespace VedAstro.Library
                 // If houseNumber is the last index in the cusps array
                 else
                 {
-                    return planetNirayanaDegrees.TotalDegrees >= cusps[(HouseName)houseNumber].TotalDegrees;
+                    return planetNirayanaDegrees.TotalDegrees >= cusps[HouseName.House12].TotalDegrees ||
+                           planetNirayanaDegrees.TotalDegrees <= cusps[HouseName.House1].TotalDegrees;
                 }
             }
             return false;
@@ -262,13 +264,8 @@ namespace VedAstro.Library
         {
             //get location at place of time
             var location = time.GetGeoLocation();
-            Console.WriteLine("Inside AllHouseCuspLongHorary with GeoLoc {0}", location.Latitude());
 
             SwissEph swissEphHorary = new SwissEph();
-            var swissEphVersion = swissEphHorary.swe_version();
-            Console.WriteLine("{0}", swissEphVersion);
-            var swissLibPath = swissEphHorary.swe_get_library_path();
-            Console.WriteLine("{0}",swissLibPath);
             swissEphHorary.swe_set_ephe_path(null);
 
             //var jul_day_ut = Calculate.TimeToJulianDay(time); REMOVE LATER
@@ -289,23 +286,17 @@ namespace VedAstro.Library
             // The obliquity of the ecliptic is the angle between the ecliptic and the celestial equator.
             // It changes over time and is calculated for a specific time.
             var eps = EclipticObliquity(time);
-            Console.WriteLine("Ecliptic Obliquity eps {0}", eps);
 
             // The horary number is converted to Tropical Ascendant degrees.
             // The Tropical Ascendant is the degree of the zodiac that is rising
             // on the eastern horizon at the time for which the horoscope is cast.
             var siderealAsc = HoraryNumberSiderealAsc(horaryNumber);
-            Console.WriteLine("siderealAsc Degrees {0}", siderealAsc);
             var tropAsc = siderealAsc + Calculate.AyanamsaDegree(time).TotalDegrees;
-            Console.WriteLine("tropAsc Degrees {0}", tropAsc);
 
             // The Ascendant degree is then converted to the ARMC (Sidereal Time).
             // The ARMC is used in the calculation of house cusps.
             var armc = ConvertAscToARMC(tropAsc, eps, location.Latitude(), time);
            // armc = 341.65;// hard set for testing
-
-            Console.WriteLine("armc {0}", armc);
-            Console.WriteLine("Latitude {0}", location.Latitude());
 
             //set ayanamsa
             swissEphHorary.swe_set_sid_mode(Calculate.Ayanamsa, 0, 0);
@@ -314,11 +305,6 @@ namespace VedAstro.Library
             string serr="";
             var jul_day_ut = Calculate.TimeToJulianDay(time);
             swissEphHorary.swe_get_ayanamsa_ex(jul_day_ut, iFlag, out daya, ref serr);
-
-            Console.Write("Ayanamsa {0}; Ayanamsa Degrees {1}, ", Calculate.Ayanamsa, Calculate.AyanamsaDegree(time));
-            var ayanamsaDegree = Calculate.AyanamsaDegree(time);
-            Console.WriteLine("Ayanamsa Degree is {0}, {1} Deg {2} Min {3} Secs ", ayanamsaDegree.Rounded,
-                ayanamsaDegree.Degrees, ayanamsaDegree.Minutes, ayanamsaDegree.Seconds);
 
             // The house system is calculated using the ARMC, latitude, and obliquity of the ecliptic.
             // The 'P' parameter specifies the Placidus house system.
@@ -429,10 +415,6 @@ namespace VedAstro.Library
 
             var lat = location.Latitude();
 
-            swissEph.swe_houses_armc(armc, lat, eps, 'P', cusps, ascmc);
-
-            //base cusps created - now repeat now with provided Long Lagna needs to be moved to
-            armc = ConvertAscToARMC(rotateDegrees, eps, location.Latitude(), time);
             swissEph.swe_houses_armc(armc, lat, eps, 'P', cusps, ascmc);
 
 
@@ -696,7 +678,7 @@ namespace VedAstro.Library
 
             // Find the horary number in the constellation list and return the corresponding siderealAsc
             var countX = 0;
-            while (countX <= 248)
+            while (countX < constellationList.Count)
             {
                 if (horaryNumber == 1)
                 {
@@ -870,7 +852,7 @@ namespace VedAstro.Library
 
             var planetSubLord = constellationList[countX].Item6;
 
-            while (countX <= 248)
+            while (countX < constellationList.Count - 1)
             {
                 if (planetLongitude.TotalDegrees < constellationList[0].Item7)
                 {
@@ -1043,7 +1025,7 @@ namespace VedAstro.Library
 
             var planetSubLord = constellationList[countX].Item6;
 
-            while (countX <= 248)
+            while (countX < constellationList.Count - 1)
             {
                 if (longitude.TotalDegrees < constellationList[0].Item7)
                 {
@@ -1271,10 +1253,6 @@ namespace VedAstro.Library
 
                 swissEph.swe_houses_armc(armc, lat, eps, 'P', cusps, ascmc);
 
-                //base cusps created - now repeat now with provided Long Lagna needs to be moved to
-                armc = ConvertAscToARMC(siderealAsc, eps, location.Latitude(), time);
-                swissEph.swe_houses_armc(armc, lat, eps, 'P', cusps, ascmc);
-
 
                 //Create Dictionary for return
                 var housesDictionary = new Dictionary<HouseName, Angle>();
@@ -1496,15 +1474,10 @@ namespace VedAstro.Library
                 cusps = AllHouseCuspLongitudesHorary(birthtime, horNum);
             }
 
-            Console.WriteLine("");
-            Console.WriteLine("Processing Planet Data now....");
             //Process Planet Data
             foreach (PlanetName planet in allPlanets)
             {
                 Angle planetNirayanaDegrees = Calculate.PlanetNirayanaLongitude(planet, birthtime);
-                Console.Write("{0} {1} {2} Deg {3} Min {4} Secs ; ", planet.Name, planetNirayanaDegrees.TotalDegrees,
-                            planetNirayanaDegrees.Degrees, planetNirayanaDegrees.Minutes,
-                            planetNirayanaDegrees.Seconds);
                 var planetConstellation = Calculate.PlanetConstellation(planet, birthtime);
 
                 x = 1;
@@ -1530,9 +1503,6 @@ namespace VedAstro.Library
 
                                 var subLordAtLongitude = CalculateKP.SubLordAtPlanetLongitude(planetNirayanaDegrees);
 
-                                Console.WriteLine("Planet {0} is in House {1} {2} {3} D {4} M {5} S ; SignL {6}; StarL {7}; SubL {8} ", planet.Name, x, zodiacSignAtLong.GetSignName(),
-                                                            zodiacSignAtLong.GetDegreesInSign().Degrees, zodiacSignAtLong.GetDegreesInSign().Minutes,
-                                                            zodiacSignAtLong.GetDegreesInSign().Seconds, lordOfZodiac, lordOfConstellation, subLordAtLongitude);
                                 planetTableData.Add(planet, (Angle.FromDegrees(planetNirayanaDegrees.TotalDegrees),(HouseName) x, zodiacSignAtLong.GetSignName(),
                                     constellationAtLong.GetConstellationName(), lordOfZodiac, lordOfConstellation, subLordAtLongitude));
 
@@ -1555,10 +1525,7 @@ namespace VedAstro.Library
 
                                 var subLordAtLongitude = CalculateKP.SubLordAtPlanetLongitude(planetNirayanaDegrees);
 
-                                Console.WriteLine("Planet {0} is in House {1} {2} {3} D {4} M {5} S; SignL {6} StarL {7} SubL {8} ", planet.Name, x + 1, zodiacSignAtLong.GetSignName(),
-                                    zodiacSignAtLong.GetDegreesInSign().Degrees, zodiacSignAtLong.GetDegreesInSign().Minutes,
-                                    zodiacSignAtLong.GetDegreesInSign().Seconds, lordOfZodiac, lordOfConstellation, subLordAtLongitude);
-                                planetTableData.Add(planet, (Angle.FromDegrees(planetNirayanaDegrees.TotalDegrees), (HouseName) (x+1), zodiacSignAtLong.GetSignName(),
+                                planetTableData.Add(planet, (Angle.FromDegrees(planetNirayanaDegrees.TotalDegrees), (HouseName)x, zodiacSignAtLong.GetSignName(),
                                     constellationAtLong.GetConstellationName(), lordOfZodiac, lordOfConstellation, subLordAtLongitude));
                                 break;
                             }
@@ -1578,11 +1545,6 @@ namespace VedAstro.Library
 
                         var subLordAtLongitude = CalculateKP.SubLordAtPlanetLongitude(planetNirayanaDegrees);
 
-                        //we use x+1 in the Console.Writeline becuase the counter is still at 11th house, but the else condition has brought us to the 12th house
-                        Console.WriteLine("Planet {0} is in House {1} {2} {3} D {4} M {5} S ; SignL {6} StarL {7} ; SubL {8} ", planet.Name, x, zodiacSignAtLong.GetSignName(),
-                            zodiacSignAtLong.GetDegreesInSign().Degrees, zodiacSignAtLong.GetDegreesInSign().Minutes,
-                            zodiacSignAtLong.GetDegreesInSign().Seconds, lordOfZodiac, lordOfConstellation, subLordAtLongitude);
-
                         planetTableData.Add(planet, (Angle.FromDegrees(planetNirayanaDegrees.TotalDegrees), (HouseName) x, zodiacSignAtLong.GetSignName(),
                             constellationAtLong.GetConstellationName(), lordOfZodiac, lordOfConstellation, subLordAtLongitude));
                         break;
@@ -1592,8 +1554,6 @@ namespace VedAstro.Library
 
 
             }
-            Console.WriteLine("Processing Planet Data Complete....");
-            Console.WriteLine("");
             return planetTableData;
         }
 

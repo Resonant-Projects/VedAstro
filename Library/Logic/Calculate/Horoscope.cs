@@ -190,10 +190,6 @@ namespace VedAstro.Library
         [HoroscopeCalculator(HoroscopeName.SunaphaYoga)]
         public static CalculatorResult SunaphaYoga(Time birthTime)
         {
-            //sun not in house 2 from moon
-            var sunMoonDistance = Calculate.SignDistanceFromPlanetToPlanet(Moon, Sun, birthTime);
-            var sunNotIn2 = sunMoonDistance != 2;
-
             //If there are planets
             //get sign 2nd house from moon
             var moon2ndHseSign = Calculate.SignCountedFromPlanetSign(2, Moon, birthTime);
@@ -201,8 +197,10 @@ namespace VedAstro.Library
             //get planets in that 2nd hse sign
             var planetsIn2 = Calculate.PlanetsInSign(moon2ndHseSign, birthTime);
 
-            //both conditions have to be met
-            var isOccuring = sunNotIn2 && planetsIn2.Any();
+            //The Sun is not counted, but it must not suppress another
+            //qualifying planet in the same sign.
+            planetsIn2.RemoveAll(planet => planet == Sun);
+            var isOccuring = planetsIn2.Any();
 
             return CalculatorResult.New(isOccuring, new[] { House2 }, new[] { Moon }, birthTime);
         }
@@ -256,8 +254,8 @@ namespace VedAstro.Library
             var bottomSideSign = Calculate.SignCountedFromPlanetSign(12, Moon, birthTime);
             var planetsInBottom = Calculate.PlanetsInSign(bottomSideSign, birthTime).Any();
 
-            //on either side of  the Moon
-            var planetOnBothSides = planetsInBottom || planetsInTop;
+            //A planet is required on each side of the Moon.
+            var planetOnBothSides = planetsInBottom && planetsInTop;
 
             return CalculatorResult.New(planetOnBothSides, new[] { Moon }, birthTime);
         }
@@ -551,7 +549,8 @@ namespace VedAstro.Library
         [HoroscopeCalculator(HoroscopeName.VasiYoga)]
         public static CalculatorResult VasiYoga(Time birthTime)
         {
-            return CalculatorResult.New(false);
+            // TODO: No implementation survives in the recoverable first-party source.
+            return CalculatorResult.NotOccuring();
         }
 
         [HoroscopeCalculator(HoroscopeName.ObhayachariYoga)]

@@ -150,10 +150,11 @@ public partial class Calculate
         var degrees = sign.GetDegreesInSign().TotalDegrees;
         var odd = IsOddSign(sign.GetSignName());
         var segments = odd
-            ? new[] { (0d, 5d, ZodiacName.Scorpio), (5d, 10d, ZodiacName.Capricorn), (10d, 18d, ZodiacName.Sagittarius), (18d, 25d, ZodiacName.Gemini), (25d, 30d, ZodiacName.Taurus) }
-            : new[] { (0d, 5d, ZodiacName.Taurus), (5d, 12d, ZodiacName.Gemini), (12d, 20d, ZodiacName.Sagittarius), (20d, 25d, ZodiacName.Capricorn), (25d, 30d, ZodiacName.Scorpio) };
+            ? new[] { (0d, 5d, ZodiacName.Aries), (5d, 10d, ZodiacName.Aquarius), (10d, 18d, ZodiacName.Sagittarius), (18d, 25d, ZodiacName.Gemini), (25d, 30d, ZodiacName.Libra) }
+            : new[] { (0d, 5d, ZodiacName.Taurus), (5d, 12d, ZodiacName.Virgo), (12d, 20d, ZodiacName.Pisces), (20d, 25d, ZodiacName.Capricorn), (25d, 30d, ZodiacName.Scorpio) };
 
-        var segment = segments.First(item => degrees >= item.Item1 && (degrees < item.Item2 || degrees == 30));
+        var segment = segments.First(item =>
+            degrees >= item.Item1 && (degrees < item.Item2 || (degrees == 30 && item.Item2 == 30)));
         var degreesInDivision = (degrees - segment.Item1) * 30d / (segment.Item2 - segment.Item1);
         return new ZodiacSign(segment.Item3, Angle.FromDegrees(degreesInDivision));
     }

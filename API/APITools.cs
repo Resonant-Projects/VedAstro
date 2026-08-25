@@ -18,11 +18,17 @@ public static class APITools
 {
     private static readonly HttpClient HttpClient = new()
     {
-        Timeout = Timeout.InfiniteTimeSpan
+        Timeout = TimeSpan.FromSeconds(30)
     };
 
+    private static readonly AsyncLocal<string?> ApiExtraNoteContext = new();
+
     /// <summary>Optional note attached to the next OpenAPI response.</summary>
-    public static string? ApiExtraNote { get; set; }
+    public static string? ApiExtraNote
+    {
+        get => ApiExtraNoteContext.Value;
+        set => ApiExtraNoteContext.Value = value;
+    }
 
     public static async Task<JObject> ExtractDataFromRequestJson(HttpRequestData request)
     {
@@ -53,7 +59,9 @@ public static class APITools
         response.Headers.Add("Access-Control-Expose-Headers", "Call-Status");
 
         var envelope = new JObject { ["Status"] = status };
-        if (!string.IsNullOrWhiteSpace(ApiExtraNote)) { envelope["Note"] = ApiExtraNote; }
+        var note = ApiExtraNote;
+        ApiExtraNote = null;
+        if (!string.IsNullOrWhiteSpace(note)) { envelope["Note"] = note; }
         if (payload is not null) { envelope["Payload"] = ToJsonToken(payload); }
         response.WriteString(envelope.ToString());
         return response;
@@ -70,16 +78,21 @@ public static class APITools
         _ => JToken.FromObject(payload)
     };
 
-    public static async Task<HttpResponseMessage> GetRequest(string receiverAddress)
+    public static async Task<HttpResponseMessage> GetRequest(
+        string receiverAddress,
+        CancellationToken cancellationToken = default)
     {
-        var response = await HttpClient.GetAsync(receiverAddress, HttpCompletionOption.ResponseContentRead);
+        var response = await HttpClient.GetAsync(
+            receiverAddress,
+            HttpCompletionOption.ResponseContentRead,
+            cancellationToken);
         response.EnsureSuccessStatusCode();
         return response;
     }
 
-    public static List<Person> GetAllPersonList(bool skipLifeEvents = false) =>
+    public static List<Person> GetAllPersonList() =>
         AzureTable.PersonList.Query<PersonListEntity>()
-            .Select(row => Person.FromAzureRow(row, skipLifeEvents))
+            .Select(row => Person.FromAzureRow(row, skipLifeEvents: true))
             .ToList();
 
     public static HttpResponseData SendTextToCaller(string content, HttpRequestData request)

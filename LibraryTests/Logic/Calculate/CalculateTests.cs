@@ -318,9 +318,11 @@ namespace VedAstro.Library.Tests
         [TestMethod()]
         public void GeoLocationTest()
         {
+            // Intentionally exercise conventional (latitude, longitude) input;
+            // the constructor can disambiguate it because 139.6917 is not a latitude.
             var x = new GeoLocation("Tokyo", 35.6895, 139.6917);
-            Assert.AreEqual(139.6917, x.Longitude());
-            Assert.AreEqual(35.6895, x.Latitude());
+            Assert.AreEqual(139.6917, x.Longitude(), 0.000001);
+            Assert.AreEqual(35.6895, x.Latitude(), 0.000001);
         }
 
         [TestMethod()]

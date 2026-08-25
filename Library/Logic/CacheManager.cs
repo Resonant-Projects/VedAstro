@@ -238,7 +238,10 @@ namespace VedAstro.Library
         }
 
         public static IEnumerable GetKeys(this IMemoryCache memoryCache) =>
-            ((MemoryCache)memoryCache).Keys;
+            memoryCache is MemoryCache concreteCache
+                ? concreteCache.Keys
+                : throw new NotSupportedException(
+                    $"Cache key enumeration requires {nameof(MemoryCache)}, not {memoryCache.GetType().FullName}.");
 
         public static IEnumerable<T> GetKeys<T>(this IMemoryCache memoryCache) =>
             GetKeys(memoryCache).OfType<T>();

@@ -67,7 +67,7 @@ The six-arc-second House 1 difference is from exercising the local route with ex
 
 ### Full legacy suite
 
-The complete `LibraryTests` run now reports 79 passed, 9 skipped, and 0 failed out of 88. The suite resets mutable calculation settings before every `CalculateTests` case, replaces debugger-era `Assert.Fail` calls with deterministic behavioral assertions, and uses type-correct contracts for Pancha Pakshi activity results.
+The complete `LibraryTests` run now reports 83 passed, 9 skipped, and 0 failed out of 92. The suite resets mutable calculation settings before every `CalculateTests` case, replaces debugger-era `Assert.Fail` calls with deterministic behavioral assertions, uses type-correct contracts for Pancha Pakshi activity results, and adds focused regressions for recovered compatibility and divisional/KP edge cases.
 
 The nine skipped tests remain named and carry explicit reasons:
 
@@ -87,6 +87,7 @@ This is a complete build restoration, not a claim of exact private-production pa
 3. D2 behavior returned by the hosted API conflicts with the classical table and the repository's own D2 tests. The port retains the first-party/classical implementation pending an upstream contract decision.
 4. Named-place geocoding requires configured Azure Maps or Google credentials. Coordinate-based calculations work without them, but existing `LocationManager` fallback behavior can substitute its empty/default location when providers are unavailable.
 5. Storage-, email-, and other cloud-backed API routes still require their documented deployment secrets. Calculation routes using explicit coordinates do not.
+6. The historical horoscope methods from `VasiYoga` through `MalikaYoga` have no surviving implementation. Their `false`/`NotOccuring` values are compatibility sentinels, not verified non-occurrences.
 
 ## Recommended next tranche
 

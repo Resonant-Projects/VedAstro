@@ -29,6 +29,7 @@ namespace VedAstro.Library.Tests
                 $"Major period: {charaDasa.MajorSign}; sub-period: {charaDasa.SubSign}");
 
             var planetsAspectingSign = Calculate.SignsPlanetIsAspecting(PlanetName.Mercury, testHoroscope);
+            CollectionAssert.Contains(planetsAspectingSign, ZodiacName.Pisces);
 
         }
 
