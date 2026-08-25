@@ -42,7 +42,7 @@ namespace API
             var inputPersonIsMale = inputPerson.Gender == Gender.Male;
 
             //get everybody (skip life events, since not needed & faster)
-            var everybody = APITools.GetAllPersonList(true);
+            var everybody = APITools.GetAllPersonList();
 
             //this makes sure each person is cross checked against this person correctly
             foreach (var personMatch in everybody)

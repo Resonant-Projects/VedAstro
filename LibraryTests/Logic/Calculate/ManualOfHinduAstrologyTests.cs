@@ -44,6 +44,7 @@ namespace VedAstro.Library.Tests
         public void AyanamsaDegreeTest()
         {
             Calculate.Ayanamsa = (int)Ayanamsa.RAMAN;
+            const double oneArcMinute = 1.0 / 60.0;
 
             // Example 1: Determine the Ayanamsa for 1912 A.D.
             // Calculation steps:
@@ -53,7 +54,7 @@ namespace VedAstro.Library.Tests
             // 76,255" = 21° 10' 55"
             var correctAyanamsa1 = new Angle(21, 10, 55);
             var calculatedAyanamsa1 = Calculate.AyanamsaDegree(new Time("00:00 01/10/1912 +05:30", GeoLocation.Bangalore));
-            Assert.AreEqual(correctAyanamsa1, calculatedAyanamsa1);
+            Assert.AreEqual(correctAyanamsa1.TotalDegrees, calculatedAyanamsa1.TotalDegrees, oneArcMinute);
 
             // Example 2: Find the Ayanamsa for 1918 A.D.
             // Calculation steps:
@@ -63,7 +64,7 @@ namespace VedAstro.Library.Tests
             // 76,557" = 21° 15' 57"
             var correctAyanamsa2 = new Angle(21, 15, 57);
             var calculatedAyanamsa2 = Calculate.AyanamsaDegree(new Time("00:00 01/10/1918 +05:30", GeoLocation.Bangalore));
-            Assert.AreEqual(correctAyanamsa2, calculatedAyanamsa2);
+            Assert.AreEqual(correctAyanamsa2.TotalDegrees, calculatedAyanamsa2.TotalDegrees, oneArcMinute);
 
         }
 

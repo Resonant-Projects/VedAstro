@@ -23,6 +23,12 @@ namespace VedAstro.Library
         // TABLE CLIENTS
         public static readonly TableClient PersonList = TableServiceClient.GetTableClient("PersonList");
 
+        /// <summary>
+        /// Recoverable storage used by Calculate.DeletePerson before removing a profile
+        /// from the active person list.
+        /// </summary>
+        public static readonly TableClient PersonListRecycleBin = TableServiceClient.GetTableClient("PersonListRecycleBin");
+
         public static readonly TableClient SubscriberCallRecords = TableServiceClient.GetTableClient("SubscriberCallRecords");
         
         public static readonly TableClient AnonymousIpCallRecords = TableServiceClient.GetTableClient("AnonymousIpCallRecords");

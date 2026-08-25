@@ -238,7 +238,10 @@ namespace VedAstro.Library
         }
 
         public static IEnumerable GetKeys(this IMemoryCache memoryCache) =>
-            ((IDictionary)GetEntriesCollection((MemoryCache)memoryCache)).Keys;
+            memoryCache is MemoryCache concreteCache
+                ? concreteCache.Keys
+                : throw new NotSupportedException(
+                    $"Cache key enumeration requires {nameof(MemoryCache)}, not {memoryCache.GetType().FullName}.");
 
         public static IEnumerable<T> GetKeys<T>(this IMemoryCache memoryCache) =>
             GetKeys(memoryCache).OfType<T>();
@@ -336,14 +339,6 @@ namespace VedAstro.Library
             return wholeCache;
 
         }
-
-        // EXTENSION FUNCTIONS TO GET KEYS OUT OF MEMORY CACHE (USED IN ASTRONOMICAL FUNCTION CACHING)
-
-        private static readonly Func<MemoryCache, object> GetEntriesCollection = Delegate.CreateDelegate(
-            typeof(Func<MemoryCache, object>),
-            typeof(MemoryCache).GetProperty("EntriesCollection", BindingFlags.NonPublic | BindingFlags.Instance).GetGetMethod(true),
-            throwOnBindFailure: true) as Func<MemoryCache, object>;
-
 
     }
 

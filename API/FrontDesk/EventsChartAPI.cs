@@ -13,7 +13,7 @@ namespace API
         //CENTRAL FOR ROUTES
         private const string RouteGetEventsChartNoCache = "EventsChartNoCache/{*settingsUrl}";
         private const string RouteGetEventsChart = "EventsChart/{*settingsUrl}";
-        private const string SendGetEventsChart = "SendEventsChart/Email/{email}";
+        private const string SendGetEventsChart = "SendEventsChart/Email";
 
 
 
@@ -161,7 +161,7 @@ namespace API
         /// </summary>
         [Function(nameof(SendEventsChartToEmail))]
         public static async Task<HttpResponseData> SendEventsChartToEmail(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = SendGetEventsChart)] HttpRequestData incomingRequest, string receiverEmail)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = SendGetEventsChart)] HttpRequestData incomingRequest)
         {
 
             try
@@ -171,6 +171,11 @@ namespace API
 
                 //data comes out of caller, basic spec on how the chart should be
                 var requestJson = await APITools.ExtractDataFromRequestJson(incomingRequest);
+                var receiverEmail = requestJson.Value<string>("receiverEmail") ??
+                                    requestJson.Value<string>("ReceiverEmail") ??
+                                    throw new ArgumentException(
+                                        "The POST body must include receiverEmail.",
+                                        "receiverEmail");
 
                 //check if the specs given is correct and readable
                 //this is partially filled chart with no generated svg content only specs
@@ -186,7 +191,12 @@ namespace API
 
                 //using Azure Email Sender, send file to given email
                 var fileName = $"Chart-{foundPerson.Name}";
-                APITools.SendEmail(fileName, "svg", receiverEmail, stream);
+                await APITools.SendEmailAsync(
+                    fileName,
+                    "svg",
+                    receiverEmail,
+                    stream,
+                    incomingRequest.FunctionContext.CancellationToken);
 
                 return APITools.PassMessageJson("Email sent success", incomingRequest);
 

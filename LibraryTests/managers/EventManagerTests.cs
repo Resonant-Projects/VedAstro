@@ -18,12 +18,25 @@ namespace VedAstro.Library.Tests
         [TestMethod()]
         public void EventSlicesToEventsTest()
         {
-            //case 1 : 1 event in middle of 2 nulls
+            var first = new Time("00:00 01/01/2000 +00:00", new GeoLocation("Greenwich", 0, 51.4934));
+            var second = first.AddHours(1);
+            var fourth = first.AddHours(3);
+            var slices = new EventSlice[]
+            {
+                null!,
+                new(EventName.GoodLunarDayForTravel, EventNature.Good, "first range", SpecializedSummary.Empty, first, true),
+                new(EventName.GoodLunarDayForTravel, EventNature.Good, "first range", SpecializedSummary.Empty, second, true),
+                null!,
+                new(EventName.GoodLunarDayForTravel, EventNature.Good, "second range", SpecializedSummary.Empty, fourth, true),
+            };
 
+            var events = EventManager.EventSlicesToEvents(slices);
 
-            //EventManager.EventSlicesToEvents(null, null, null, null, new[] { 1, 2});
-
-            Assert.Fail();
+            Assert.AreEqual(2, events.Count);
+            Assert.AreEqual(first, events[0].StartTime);
+            Assert.AreEqual(second, events[0].EndTime);
+            Assert.AreEqual(fourth, events[1].StartTime);
+            Assert.AreEqual(fourth, events[1].EndTime);
         }
 
 
