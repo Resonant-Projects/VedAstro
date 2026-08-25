@@ -15,7 +15,11 @@ public class HostedOracleRegressionTests
         new GeoLocation("Singapore, Singapore", 103.85, 1.289));
 
     [TestInitialize]
-    public void UseProductionAyanamsa() => Calculate.Ayanamsa = (int)Ayanamsa.LAHIRI;
+    public void UseProductionSettings()
+    {
+        Calculate.Ayanamsa = (int)Ayanamsa.LAHIRI;
+        Calculate.SolarYearTimeSpan = 365.35;
+    }
 
     [TestMethod]
     public void PlanetLongitudesMatchHostedApiWithinOneArcSecond()

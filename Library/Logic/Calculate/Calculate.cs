@@ -7,6 +7,7 @@ using System.Data;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using static VedAstro.Library.PlanetName;
 using Exception = System.Exception;
@@ -88,8 +89,18 @@ namespace VedAstro.Library
         /// </summary>
         public static bool UseMeanRahuKetu { get; set; } = true;
 
-        private static string GetAnyScaleConfiguration() =>
-            Environment.GetEnvironmentVariable("AnyScale" + "APIKey")!;
+        private static readonly HttpClient AnyScaleHttpClient = new()
+        {
+            BaseAddress = new Uri("https://api.endpoints.anyscale.com/v1/chat/completions"),
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+
+        private static readonly HttpClient BingHttpClient = new()
+        {
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+
+        private static string GetAnyScaleConfiguration() => Secrets.Get("AnyScaleAPIKey");
 
 
         #endregion
@@ -669,23 +680,25 @@ namespace VedAstro.Library
             return compatibilityReport;
         }
 
-        public static async Task<string> BirthTimeLocationAutoAIFill(string personFullName)
+        public static async Task<string> BirthTimeLocationAutoAIFill(
+            string personFullName,
+            CancellationToken cancellationToken = default)
         {
             //get birth time as compatible text
-            var birthTime = await BirthTimeAutoAIFill(personFullName);
+            var birthTime = await BirthTimeAutoAIFill(personFullName, cancellationToken);
 
             //get birth location as compatible text, without comma
-            var birthLocation = await BirthLocationAutoAIFill(personFullName);
+            var birthLocation = await BirthLocationAutoAIFill(personFullName, cancellationToken);
 
             //get birth location as compatible text, without comma
-            var marriagePartnerName = await MarriagePartnerNameAutoAIFill(personFullName);
+            var marriagePartnerName = await MarriagePartnerNameAutoAIFill(personFullName, cancellationToken);
 
             //get partner data
-            var marriagePartnerBirthTime = await BirthTimeAutoAIFill(marriagePartnerName);
-            var marriagePartnerBirthLocation = await BirthLocationAutoAIFill(marriagePartnerName);
+            var marriagePartnerBirthTime = await BirthTimeAutoAIFill(marriagePartnerName, cancellationToken);
+            var marriagePartnerBirthLocation = await BirthLocationAutoAIFill(marriagePartnerName, cancellationToken);
 
             //get marriage data
-            var marriageTags = await MarriageTagsAutoAIFill(personFullName, marriagePartnerName);
+            var marriageTags = await MarriageTagsAutoAIFill(personFullName, marriagePartnerName, cancellationToken);
 
             return $"{marriageTags},{personFullName},{birthTime},{birthLocation},{marriagePartnerName},{marriagePartnerBirthTime},{marriagePartnerBirthLocation}";
         }
@@ -693,154 +706,102 @@ namespace VedAstro.Library
         /// <summary>
         /// Given a famous person name will auto find birth time using LLM AI
         /// </summary>
-        public static async Task<string> BirthTimeAutoAIFill(string personFullName)
+        public static Task<string> BirthTimeAutoAIFill(
+            string personFullName,
+            CancellationToken cancellationToken = default)
         {
-            string anyScaleAPIKey = GetAnyScaleConfiguration();
-
-            using (var client = new HttpClient())
+            var messages = new List<object>
             {
-                var requestBodyObject = new
-                {
-                    model = "meta-llama/Meta-Llama-3-70B-Instruct",
-                    messages = new List<object>
-                    {
-                        new { role = "system", content = "given person name output birth time as {HH:mm DD/MM/YYYY zzz}" },
-                        new { role = "user", content = "Monroe, Marilyn" },
-                        new { role = "assistant", content = "09:30 01/06/1926 -08:00" },
-                        new { role = "user", content = personFullName }
-                    }
-                };
-
-                string requestBody = JsonConvert.SerializeObject(requestBodyObject);
-
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", anyScaleAPIKey);
-                client.BaseAddress = new Uri("https://api.endpoints.anyscale.com/v1/chat/completions");
-
-                var content = new StringContent(requestBody);
-                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                HttpResponseMessage response = await client.PostAsync("", content);
-
-                string responseContent = await response.Content.ReadAsStringAsync();
-                var fullResponse = JObject.Parse(responseContent);
-                var message = fullResponse["choices"][0]["message"]["content"].Value<string>();
-
-                return message;
-            }
+                new { role = "system", content = "given person name output birth time as {HH:mm DD/MM/YYYY zzz}" },
+                new { role = "user", content = "Monroe, Marilyn" },
+                new { role = "assistant", content = "09:30 01/06/1926 -08:00" },
+                new { role = "user", content = personFullName }
+            };
+            return CallAnyScale(messages, cancellationToken);
         }
 
-        public static async Task<string> MarriageTagsAutoAIFill(string personA, string personB)
+        public static Task<string> MarriageTagsAutoAIFill(
+            string personA,
+            string personB,
+            CancellationToken cancellationToken = default)
         {
-            string anyScaleAPIKey = GetAnyScaleConfiguration();
-
-            using (var client = new HttpClient())
+            var messages = new List<object>
             {
-                var requestBodyObject = new
-                {
-                    model = "meta-llama/Meta-Llama-3-70B-Instruct",
-                    messages = new List<object>
-                    {
-                        new { role = "system", content = "given married couple name output marriage duration in years" },
-                        new { role = "user", content = "Brad Pitt & Angelina Jolie" },
-                        new { role = "assistant", content = "#2Years" },
-                        new { role = "user", content = "Napoleon Bonaparte & Joséphine" },
-                        new { role = "assistant", content = "#14Years" },
-                        new { role = "user", content = "Dax Shepard & Kristen Bell" },
-                        new { role = "assistant", content = "#StillMarried" },
-                        new { role = "user", content = $"{personA} & {personB}" }
-                    }
-                };
-
-                string requestBody = JsonConvert.SerializeObject(requestBodyObject);
-
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", anyScaleAPIKey);
-                client.BaseAddress = new Uri("https://api.endpoints.anyscale.com/v1/chat/completions");
-
-                var content = new StringContent(requestBody);
-                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                HttpResponseMessage response = await client.PostAsync("", content);
-
-                string responseContent = await response.Content.ReadAsStringAsync();
-                var fullResponse = JObject.Parse(responseContent);
-                var message = fullResponse["choices"][0]["message"]["content"].Value<string>();
-
-                return message;
-            }
+                new { role = "system", content = "given married couple name output marriage duration in years" },
+                new { role = "user", content = "Brad Pitt & Angelina Jolie" },
+                new { role = "assistant", content = "#2Years" },
+                new { role = "user", content = "Napoleon Bonaparte & Joséphine" },
+                new { role = "assistant", content = "#14Years" },
+                new { role = "user", content = "Dax Shepard & Kristen Bell" },
+                new { role = "assistant", content = "#StillMarried" },
+                new { role = "user", content = $"{personA} & {personB}" }
+            };
+            return CallAnyScale(messages, cancellationToken);
         }
 
         /// <summary>
         /// Given a famous person name will auto find birth location using LLM AI
         /// </summary>
-        public static async Task<string> BirthLocationAutoAIFill(string personFullName)
+        public static Task<string> BirthLocationAutoAIFill(
+            string personFullName,
+            CancellationToken cancellationToken = default)
         {
-            string anyScaleAPIKey = GetAnyScaleConfiguration();
-
-            using (var client = new HttpClient())
+            var messages = new List<object>
             {
-                var requestBodyObject = new
-                {
-                    model = "meta-llama/Meta-Llama-3-70B-Instruct",
-                    messages = new List<object>
-                    {
-                        new { role = "system", content = "given person name output birth location as {city state country}" },
-                        new { role = "user", content = "Monroe, Marilyn" },
-                        new { role = "assistant", content = "Los Angeles California USA" },
-                        new { role = "user", content = personFullName }
-                    }
-                };
-
-                string requestBody = JsonConvert.SerializeObject(requestBodyObject);
-
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", anyScaleAPIKey);
-                client.BaseAddress = new Uri("https://api.endpoints.anyscale.com/v1/chat/completions");
-
-                var content = new StringContent(requestBody);
-                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                HttpResponseMessage response = await client.PostAsync("", content);
-
-                string responseContent = await response.Content.ReadAsStringAsync();
-                var fullResponse = JObject.Parse(responseContent);
-                var message = fullResponse["choices"][0]["message"]["content"].Value<string>(); ;
-
-                return message;
-            }
+                new { role = "system", content = "given person name output birth location as {city state country}" },
+                new { role = "user", content = "Monroe, Marilyn" },
+                new { role = "assistant", content = "Los Angeles California USA" },
+                new { role = "user", content = personFullName }
+            };
+            return CallAnyScale(messages, cancellationToken);
         }
 
         /// <summary>
         /// Given a famous person name will auto find marriage partner using LLM AI
         /// </summary>
-        public static async Task<string> MarriagePartnerNameAutoAIFill(string personFullName)
+        public static Task<string> MarriagePartnerNameAutoAIFill(
+            string personFullName,
+            CancellationToken cancellationToken = default)
         {
-            string anyScaleAPIKey = GetAnyScaleConfiguration();
-
-            using (var client = new HttpClient())
+            var messages = new List<object>
             {
-                var requestBodyObject = new
-                {
-                    model = "meta-llama/Meta-Llama-3-70B-Instruct",
-                    messages = new List<object>
-                    {
-                        new { role = "system", content = "given person name output first marriage partner name" },
-                        new { role = "user", content = "Monroe, Marilyn" },
-                        new { role = "assistant", content = "James Dougherty" },
-                        new { role = "user", content = personFullName }
-                    }
-                };
+                new { role = "system", content = "given person name output first marriage partner name" },
+                new { role = "user", content = "Monroe, Marilyn" },
+                new { role = "assistant", content = "James Dougherty" },
+                new { role = "user", content = personFullName }
+            };
+            return CallAnyScale(messages, cancellationToken);
+        }
 
-                string requestBody = JsonConvert.SerializeObject(requestBodyObject);
+        private static async Task<string> CallAnyScale(
+            IReadOnlyCollection<object> messages,
+            CancellationToken cancellationToken)
+        {
+            var requestBody = JsonConvert.SerializeObject(new
+            {
+                model = "meta-llama/Meta-Llama-3-70B-Instruct",
+                messages
+            });
+            using var request = new HttpRequestMessage(HttpMethod.Post, "")
+            {
+                Content = new StringContent(requestBody, Encoding.UTF8, MediaTypeNames.Application.Json)
+            };
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", GetAnyScaleConfiguration());
 
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", anyScaleAPIKey);
-                client.BaseAddress = new Uri("https://api.endpoints.anyscale.com/v1/chat/completions");
-
-                var content = new StringContent(requestBody);
-                content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-                HttpResponseMessage response = await client.PostAsync("", content);
-
-                string responseContent = await response.Content.ReadAsStringAsync();
-                var fullResponse = JObject.Parse(responseContent);
-                var message = fullResponse["choices"][0]["message"]["content"].Value<string>(); ;
-
-                return message;
+            using var response = await AnyScaleHttpClient.SendAsync(request, cancellationToken);
+            var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"AnyScale request failed with HTTP {(int)response.StatusCode}: {responseContent}");
             }
+
+            var message = JObject.Parse(responseContent)
+                .SelectToken("choices[0].message.content")
+                ?.Value<string>();
+            return !string.IsNullOrWhiteSpace(message)
+                ? message
+                : throw new InvalidOperationException("AnyScale response did not contain choices[0].message.content.");
         }
 
         public class Movie
@@ -855,29 +816,24 @@ namespace VedAstro.Library
             public Movie[] Value { get; set; }
         }
 
-        public static async Task<JObject> GetData(string searchQuery)
+        public static async Task<JObject> GetData(
+            string searchQuery,
+            CancellationToken cancellationToken = default)
         {
             string subscriptionKey = Secrets.Get("BING_IMAGE_SEARCH");
-
-            //string searchQuery = $"movies directed by {director}";
-            string bingAPIEndpoint = "https://api.bing.microsoft.com/v7.0/entities";
-
-            using (var client = new HttpClient())
+            var uri = new Uri(
+                $"https://api.bing.microsoft.com/v7.0/entities?q={Uri.EscapeDataString(searchQuery)}&count=100&mkt=en-US");
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            request.Headers.Add("Ocp-Apim-Subscription-Key", subscriptionKey);
+            using var response = await BingHttpClient.SendAsync(request, cancellationToken);
+            var jsonResponse = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
             {
-                var uri = new Uri($"{bingAPIEndpoint}?q={Uri.EscapeDataString(searchQuery)}&count=100&mkt=en-US");
-                client.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", subscriptionKey);
-
-                var response = await client.GetAsync(uri);
-
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                JObject jobj = JObject.Parse(jsonResponse);
-
-                return jobj;
+                throw new HttpRequestException(
+                    $"Bing entity search failed with HTTP {(int)response.StatusCode}: {jsonResponse}");
             }
 
-
-            throw new NotImplementedException();
+            return JObject.Parse(jsonResponse);
         }
 
 
@@ -4280,10 +4236,8 @@ namespace VedAstro.Library
 
         public static ZodiacSign PanchamsaSignName(ZodiacSign zodiacSign)
         {
-            //TODO
-            return new ZodiacSign();
-
-            throw new Exception("END OF LINE!");
+            throw new NotImplementedException(
+                "Panchamsa (D5) division has no complete first-party implementation in the recoverable source history.");
         }
 
         /// <summary>
@@ -5626,12 +5580,12 @@ namespace VedAstro.Library
         /// <summary>
         /// Gulika rises at the middle of Saturn's part.
         /// </summary>
-        public static Angle GulikaLongitude(Time time) => UpagrahaLongitude(time, PlanetNameEnum.Saturn, "begin");
+        public static Angle GulikaLongitude(Time time) => UpagrahaLongitude(time, PlanetNameEnum.Saturn, "middle");
 
         /// <summary>
         /// Maandi rises at the beginning of Saturn's part.
         /// </summary>
-        public static Angle MaandiLongitude(Time time) => UpagrahaLongitude(time, PlanetNameEnum.Saturn, "middle");
+        public static Angle MaandiLongitude(Time time) => UpagrahaLongitude(time, PlanetNameEnum.Saturn, "begin");
 
         /// <summary>
         /// Calculates longitudes for the non sun based Upagrahas (sub-planets)
@@ -10847,11 +10801,11 @@ namespace VedAstro.Library
                     powerlessPointLongitude = powerlessHouse.GetMiddleLongitude();
                 }
 
-                //get Digbala arc
+                // No cardinal point is defined for upagrahas, so no Dig Bala applies.
+                if (powerlessPointLongitude is null) { return Shashtiamsa.Zero; }
+
                 //Digbala arc= planet's long. - its powerless cardinal point.
-                //var digBalaArc = planetLongitude.GetDifference(powerlessPointLongitude);
-                var xxx = powerlessPointLongitude.TotalDegrees == null ? Angle.Zero : powerlessPointLongitude;
-                var digBalaArc = DistanceBetweenPlanets(planetLongitude, xxx);
+                var digBalaArc = DistanceBetweenPlanets(planetLongitude, powerlessPointLongitude);
 
                 //If difference is more than 180°
                 if (digBalaArc > Angle.Degrees180)

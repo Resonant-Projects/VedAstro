@@ -349,9 +349,12 @@ public partial class Calculate
         var yearRange = Regex.Match(preset, @"^(?<start>\d{4})-(?<end>\d{4})$");
         if (yearRange.Success)
         {
-            var startYear = int.Parse(yearRange.Groups["start"].Value);
-            var endYear = int.Parse(yearRange.Groups["end"].Value);
-            if (endYear < startYear) return TimeRange.Empty;
+            if (!int.TryParse(yearRange.Groups["start"].Value, out var startYear) ||
+                !int.TryParse(yearRange.Groups["end"].Value, out var endYear) ||
+                startYear < 1 || endYear > 9999 || endYear < startYear)
+            {
+                return TimeRange.Empty;
+            }
 
             return new TimeRange(
                 new Time(new DateTimeOffset(startYear, 1, 1, 0, 0, 0, outputTimezone), location),
@@ -361,9 +364,14 @@ public partial class Calculate
         var ageRange = Regex.Match(preset, @"^age(?<start>\d+)to(?<end>\d+)$");
         if (ageRange.Success)
         {
-            var startAge = int.Parse(ageRange.Groups["start"].Value);
-            var endAge = int.Parse(ageRange.Groups["end"].Value);
-            if (endAge < startAge) return TimeRange.Empty;
+            const int maximumSupportedAge = 150;
+            if (!int.TryParse(ageRange.Groups["start"].Value, out var startAge) ||
+                !int.TryParse(ageRange.Groups["end"].Value, out var endAge) ||
+                startAge < 0 || endAge > maximumSupportedAge || endAge < startAge ||
+                birthAtMidnight.GetStdDateTimeOffset().Year + endAge > 9999)
+            {
+                return TimeRange.Empty;
+            }
 
             // In the website's user-facing convention, "age 1" begins at birth.
             if (startAge == 1) startAge = 0;

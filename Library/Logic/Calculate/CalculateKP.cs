@@ -359,7 +359,6 @@ namespace VedAstro.Library
             //Convert DOB to Julian Day
             var jul_day_UT = TimeToJulianDay(time);
 
-
             SwissEph swissEph = new SwissEph();
             double[] cusps = new double[13];
             double[] ascmc = new double[10];
@@ -436,11 +435,6 @@ namespace VedAstro.Library
         {
             //get location at place of time
             var location = time.GetGeoLocation();
-
-            //Convert DOB to Julian Day
-            var jul_day_UT = TimeToJulianDay(time);
-
-
             SwissEph swissEph = new SwissEph();
 
             double[] cusps = new double[13];
@@ -454,17 +448,8 @@ namespace VedAstro.Library
 
             var eps = Calculate.EclipticObliquity(time);
 
-            var tropAscFromHorNum = HoraryNumberSiderealAsc(horaryNumber);
-            var armc = ConvertAscToARMC(tropAscFromHorNum, eps, location.Latitude(), time);
-
             var lat = location.Latitude();
-
-            Console.WriteLine("armc {0} eps {1} tropAsc {2} lat {3}", armc, eps, tropAscFromHorNum, lat);
-
-            swissEph.swe_houses_armc(armc, lat, eps, 'P', cusps, ascmc);
-
-            //base cusps created - now repeat now with provided Long Lagna needs to be moved to
-            armc = ConvertAscToARMC(rotateDegrees, eps, location.Latitude(), time);
+            var armc = ConvertAscToARMC(rotateDegrees, eps, lat, time);
             swissEph.swe_houses_armc(armc, lat, eps, 'P', cusps, ascmc);
 
 
@@ -677,6 +662,13 @@ namespace VedAstro.Library
             }
 
             // Find the horary number in the constellation list and return the corresponding siderealAsc
+            if (horaryNumber < 1 || horaryNumber > constellationList.Count)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(horaryNumber), horaryNumber,
+                    $"Horary number must be between 1 and {constellationList.Count}.");
+            }
+
             var countX = 0;
             while (countX < constellationList.Count)
             {

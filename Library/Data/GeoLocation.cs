@@ -86,16 +86,18 @@ namespace VedAstro.Library
 
             //coordinates have been known to be inputed with misplaced decimal (from api)
             //this will check and try correct if possible
-            bool isValid = IsValidLatitudeLongitude(longitude, latitude);
-            if (isValid) //normal operation
+            var longitudeIsValid = longitude is >= -180 and <= 180;
+            var latitudeIsValid = latitude is >= -90 and <= 90;
+            if (longitudeIsValid && latitudeIsValid) //normal operation
             {
                 _longitude = longitude;
                 _latitude = latitude;
             }
             else //abnormal input, auto correct decimal place as most likely fault (heavy computation use only when sure fail)
             {
-                _longitude = CorrectDecimalPoint(longitude);
-                _latitude = CorrectDecimalPoint(latitude);
+                IsValidLatitudeLongitude(longitude, latitude);
+                _longitude = longitudeIsValid ? longitude : CorrectDecimalPoint(longitude);
+                _latitude = latitudeIsValid ? latitude : CorrectDecimalPoint(latitude);
             }
         }
 

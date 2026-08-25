@@ -22,6 +22,16 @@ public static class APITools
     };
 
     private static readonly AsyncLocal<string?> ApiExtraNoteContext = new();
+    private static readonly Lazy<EmailClient> EmailClient = new(() =>
+    {
+        var connectionString = Secrets.Get("AutoEmailerConnectString");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException("Missing AutoEmailerConnectString configuration.");
+        }
+
+        return new EmailClient(connectionString);
+    });
 
     /// <summary>Optional note attached to the next OpenAPI response.</summary>
     public static string? ApiExtraNote
@@ -122,14 +132,13 @@ public static class APITools
         return PassMessageJson(payload, request);
     }
 
-    public static void SendEmail(string fileName, string fileFormat, string receiverEmailAddress, Stream file)
+    public static async Task SendEmailAsync(
+        string fileName,
+        string fileFormat,
+        string receiverEmailAddress,
+        Stream file,
+        CancellationToken cancellationToken = default)
     {
-        var emailServiceConfiguration = Secrets.Get("AutoEmailerConnectString");
-        if (string.IsNullOrWhiteSpace(emailServiceConfiguration))
-        {
-            throw new InvalidOperationException("Missing AutoEmailerConnectString configuration.");
-        }
-
         var extension = fileFormat.ToLowerInvariant();
         var fullName = $"{fileName}.{extension}";
         var content = new EmailContent($"Shared {fileFormat.ToUpperInvariant()} from VedAstro")
@@ -141,7 +150,7 @@ public static class APITools
         var mimeType = Tools.StringToMimeType(fileFormat) ?? MediaTypeNames.Application.Octet;
         message.Attachments.Add(new EmailAttachment(fullName, mimeType, BinaryData.FromStream(file)));
 
-        var operation = new EmailClient(emailServiceConfiguration).Send(WaitUntil.Completed, message);
+        var operation = await EmailClient.Value.SendAsync(WaitUntil.Completed, message, cancellationToken);
         if (operation.Value.Status != EmailSendStatus.Succeeded)
         {
             throw new InvalidOperationException($"Email delivery ended with status {operation.Value.Status}.");

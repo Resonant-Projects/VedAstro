@@ -56,6 +56,34 @@ public class RecoveredEdgeCaseRegressionTests
         Assert.ThrowsException<NotImplementedException>(() => Calculate.PunyaSahamLongitude(time));
     }
 
+    [TestMethod]
+    public void OtherUnsupportedDivisionsAndInvalidHoraryInputsFailExplicitly()
+    {
+        Assert.ThrowsException<NotImplementedException>(() =>
+            Calculate.PanchamsaSignName(new ZodiacSign(ZodiacName.Aries, Angle.FromDegrees(10))));
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => CalculateKP.HoraryNumberSiderealAsc(0));
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => CalculateKP.HoraryNumberSiderealAsc(1000));
+    }
+
+    [TestMethod]
+    public void CoordinateRecoveryPreservesTheAlreadyValidAxis()
+    {
+        var location = new GeoLocation("Recovered latitude", 77.575, 129770000);
+
+        Assert.AreEqual(77.575, location.Longitude(), 0.000001);
+        Assert.AreEqual(12.977, location.Latitude(), 0.000001);
+    }
+
+    [TestMethod]
+    public void UpagrahasWithoutCardinalPointsHaveNoDigBala()
+    {
+        var time = new Time(
+            "12:00 01/01/2000 +08:00",
+            new GeoLocation("Singapore, Singapore", 103.85, 1.289));
+
+        Assert.AreEqual(Shashtiamsa.Zero, Calculate.PlanetDigBala(PlanetName.Gulika, time));
+    }
+
     private static void AssertTrimshamsha(
         ZodiacName sourceSign,
         double degrees,

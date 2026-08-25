@@ -139,7 +139,7 @@ namespace VedAstro.Library
         public static CalculatorResult MoonAshtakavargaYoga2B(Time birthTime)
         {
             //Moon in the 6th or 11th
-            var moonHouse = Calculate.HousePlanetOccupies(Moon, birthTime);
+            var moonHouse = Calculate.HousePlanetOccupiesBasedOnSign(Moon, birthTime);
             var isMoonIn6th11th = moonHouse == House6 || moonHouse == House11;
 
             //associated with more than 6 bindus
@@ -249,10 +249,10 @@ namespace VedAstro.Library
         {
             //If there are planets on either side of the Moon
             var topSideSign = Calculate.SignCountedFromPlanetSign(2, Moon, birthTime);
-            var planetsInTop = Calculate.PlanetsInSign(topSideSign, birthTime).Any();
+            var planetsInTop = Calculate.PlanetsInSign(topSideSign, birthTime).Any(planet => planet != Sun);
 
             var bottomSideSign = Calculate.SignCountedFromPlanetSign(12, Moon, birthTime);
-            var planetsInBottom = Calculate.PlanetsInSign(bottomSideSign, birthTime).Any();
+            var planetsInBottom = Calculate.PlanetsInSign(bottomSideSign, birthTime).Any(planet => planet != Sun);
 
             //A planet is required on each side of the Moon.
             var planetOnBothSides = planetsInBottom && planetsInTop;
@@ -274,11 +274,11 @@ namespace VedAstro.Library
             //If there are planets on either side of the Moon
             //count to sign next to moon on right
             var topSideSign = Calculate.SignCountedFromPlanetSign(2, Moon, birthTime);
-            var noPlanetsInTop = Calculate.PlanetsInSign(topSideSign, birthTime).Any() == false;
+            var noPlanetsInTop = Calculate.PlanetsInSign(topSideSign, birthTime).Any(planet => planet != Sun) == false;
 
             //count around to sign left side of moon (since counter only goes one way)
             var bottomSideSign = Calculate.SignCountedFromPlanetSign(12, Moon, birthTime);
-            var noPlanetsInBottom = Calculate.PlanetsInSign(bottomSideSign, birthTime).Any() == false;
+            var noPlanetsInBottom = Calculate.PlanetsInSign(bottomSideSign, birthTime).Any(planet => planet != Sun) == false;
 
             //no planets on both sides of the Moon
             var planetOnBothSides = noPlanetsInBottom && noPlanetsInTop;

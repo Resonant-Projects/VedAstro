@@ -228,9 +228,13 @@ namespace VedAstro.Library.Tests
         [TestMethod()]
         public void LMTToSTDTest()
         {
+            var location = StandardHoroscope.GetGeoLocation();
             var localMeanTime = StandardHoroscope.GetLmtDateTimeOffset();
+            var standardTime = Calculate.LmtToStd(
+                new LocalMeanTime(localMeanTime.DateTime, location.Longitude()),
+                StandardHoroscope.GetStdDateTimeOffset().Offset);
 
-            Assert.AreEqual(new TimeSpan(14, 0, 0), localMeanTime.TimeOfDay);
+            Assert.AreEqual(StandardHoroscope.GetStdDateTimeOffset(), standardTime);
         }
 
         //[TestMethod()]
@@ -967,13 +971,13 @@ namespace VedAstro.Library.Tests
             // Test for Gulika
             var gulikaTest1 = Calculate.PlanetNirayanaLongitude(PlanetName.Gulika, StandardHoroscope);
             var gulikaTruth1 = Calculate.LongitudeAtZodiacSign(new ZodiacSign(ZodiacName.Sagittarius,
-                new Angle(0, 33, 6))); // Replace with correct values
+                new Angle(10, 38, 34)));
             Assert.IsTrue(Math.Abs((gulikaTest1 - gulikaTruth1).TotalDegrees) <= errorRate);
 
             // Test for Maandi
             var maandiTest1 = Calculate.PlanetNirayanaLongitude(PlanetName.Maandi, StandardHoroscope);
             var maandiTruth1 = Calculate.LongitudeAtZodiacSign(new ZodiacSign(ZodiacName.Sagittarius,
-                new Angle(10, 38, 34))); // Replace with correct values
+                new Angle(0, 33, 6)));
             Assert.IsTrue(Math.Abs((maandiTest1 - maandiTruth1).TotalDegrees) <= errorRate);
         }
 
@@ -1295,17 +1299,10 @@ namespace VedAstro.Library.Tests
         }
 
         [TestMethod()]
-        public void PlanetDivisionalLongitudeTest()
+        public void PlanetDivisionalLongitudeDelegatesToGenericDivision()
         {
             //use LAHIRI
             Calculate.Ayanamsa = (int)SimpleAyanamsa.LahiriChitrapaksha;
-
-            //For example, if planet Jupiter is at 12 degrees 04 minutes in any sign and
-            //we want to calculate the longitude of planet Jupiter in D-7.
-            //Here, Simple multiply 12 degrees 4 minutes by 7 and you will get 84 degrees 28 minutes.
-            // 
-            // Now from 84 degrees 28 minutes remove two completed signs(subtract 60) which will give us
-            // 24 degree and 28 minutes and this will be the longitude of planet Jupiter in D-7.
 
             var longitude = Calculate.PlanetNirayanaLongitude(PlanetName.Jupiter, StandardHoroscope);
             var expected = Calculate.DivisionalLongitude(longitude.TotalDegrees, 7);

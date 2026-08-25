@@ -186,7 +186,12 @@ namespace API
 
                 //using Azure Email Sender, send file to given email
                 var fileName = $"Chart-{foundPerson.Name}";
-                APITools.SendEmail(fileName, "svg", receiverEmail, stream);
+                await APITools.SendEmailAsync(
+                    fileName,
+                    "svg",
+                    receiverEmail,
+                    stream,
+                    incomingRequest.FunctionContext.CancellationToken);
 
                 return APITools.PassMessageJson("Email sent success", incomingRequest);
 
