@@ -118,4 +118,4 @@ The hosted API demonstrates that a more complete build exists somewhere, but nei
 
 ## Recommendation
 
-Treat `40763952-2665-stable` as the authoritative recoverable implementation and the live API as the behavioral oracle. Do not treat current `master` as an engine source baseline until the historical code has been ported behind tests. The code can be recovered substantially, but the modern production delta cannot be recovered exactly from any currently public first-party artifact.
+This was the pre-restoration recommendation: treat `40763952-2665-stable` as the safest buildable donor and the live API as the behavioral oracle. The integrated restoration instead uses the newer complete donor `e1e65d81450e3387115e50cfc6eaf1bdc48939bb`, current compatibility layers, and the oracle-backed tests documented in `vedastro-master-restoration.md`. That integrated, tested code is now the fork baseline. The exact private-production delta still cannot be recovered from any currently public first-party artifact.

@@ -63,7 +63,7 @@ The rebuilt Azure Functions container returns successful JSON envelopes for the 
 | Sun Ishta score | 8.5872649871 | 8.5872649871 |
 | House 1 | Aquarius 29.5238888889 degrees | Aquarius 29.5255555556 degrees |
 
-The six-arc-second House 1 difference is from exercising the local route with explicit rounded coordinates while the hosted snapshot used its named-location geocoder.
+Both House 1 values use the Singapore J2000 fixture at explicit longitude `103.85` and latitude `1.289`; the hosted value is the frozen literal `29.5255555556` degrees. The evidence establishes only the observed six-arc-second difference, not a geocoder-specific cause.
 
 ### Full legacy suite
 
@@ -85,7 +85,7 @@ This is a complete build restoration, not a claim of exact private-production pa
 1. The deployed server binary/source is not public, so methods absent from all public history can only be reconstructed from metadata and observable API behavior.
 2. The hosted Jaimini endpoint does not expose enough structured period data to validate the provisional chara-dasa wrapper. It should not be promoted as production-equivalent yet.
 3. D2 behavior returned by the hosted API conflicts with the classical table and the repository's own D2 tests. The port retains the first-party/classical implementation pending an upstream contract decision.
-4. Named-place geocoding requires configured Azure Maps or Google credentials. Coordinate-based calculations work without them, but existing `LocationManager` fallback behavior can substitute its empty/default location when providers are unavailable.
+4. Named-place geocoding requires Azure Maps or Google credentials to be configured. Coordinate-based calculations work without them, but existing `LocationManager` fallback behavior can substitute its empty/default location when providers are unavailable.
 5. Storage-, email-, and other cloud-backed API routes still require their documented deployment secrets. Calculation routes using explicit coordinates do not.
 6. The historical horoscope methods from `VasiYoga` through `MalikaYoga` have no surviving implementation. Their `false`/`NotOccuring` values are compatibility sentinels, not verified non-occurrences.
 

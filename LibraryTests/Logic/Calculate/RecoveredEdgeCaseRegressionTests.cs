@@ -32,6 +32,7 @@ public class RecoveredEdgeCaseRegressionTests
         Assert.IsFalse(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(5), HouseName.House12));
         Assert.IsTrue(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(5), HouseName.House1));
         Assert.IsFalse(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(350), HouseName.House11));
+        Assert.AreEqual(HouseName.House12, CalculateKP.HouseAtLongitude(cusps, Angle.FromDegrees(350)));
 
         cusps.Remove(HouseName.House1);
         Assert.IsFalse(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(350), HouseName.House12));
@@ -66,6 +67,8 @@ public class RecoveredEdgeCaseRegressionTests
             Calculate.PanchamsaSignName(new ZodiacSign(ZodiacName.Aries, Angle.FromDegrees(10))));
         Assert.ThrowsException<ArgumentOutOfRangeException>(() => CalculateKP.HoraryNumberSiderealAsc(0));
         Assert.ThrowsException<ArgumentOutOfRangeException>(() => CalculateKP.HoraryNumberSiderealAsc(1000));
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
+            CalculateKP.ConvertAscToARMC(360, 23.4, 0, Time.Empty));
     }
 
     [TestMethod]

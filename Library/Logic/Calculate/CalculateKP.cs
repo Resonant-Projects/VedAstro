@@ -266,7 +266,7 @@ namespace VedAstro.Library
             //get location at place of time
             var location = time.GetGeoLocation();
 
-            SwissEph swissEphHorary = new SwissEph();
+            using SwissEph swissEphHorary = new SwissEph();
             swissEphHorary.swe_set_ephe_path(null);
 
             //var jul_day_ut = Calculate.TimeToJulianDay(time); REMOVE LATER
@@ -329,7 +329,7 @@ namespace VedAstro.Library
 
         public static double GetNutation(Time time)
         {
-            SwissEph swissEph = new SwissEph();
+            using SwissEph swissEph = new SwissEph();
             double[] x = new double[6];
             string serr = "";
 
@@ -360,7 +360,7 @@ namespace VedAstro.Library
             //Convert DOB to Julian Day
             var jul_day_UT = TimeToJulianDay(time);
 
-            SwissEph swissEph = new SwissEph();
+            using SwissEph swissEph = new SwissEph();
             double[] cusps = new double[13];
             double[] ascmc = new double[10];
 
@@ -398,7 +398,7 @@ namespace VedAstro.Library
             //get location at place of time
             var location = time.GetGeoLocation();
 
-            SwissEph swissEph = new SwissEph();
+            using SwissEph swissEph = new SwissEph();
 
             double[] cusps = new double[13];
 
@@ -436,7 +436,7 @@ namespace VedAstro.Library
         {
             //get location at place of time
             var location = time.GetGeoLocation();
-            SwissEph swissEph = new SwissEph();
+            using SwissEph swissEph = new SwissEph();
 
             double[] cusps = new double[13];
 
@@ -478,6 +478,12 @@ namespace VedAstro.Library
         /// </summary>
         public static double ConvertAscToARMC(double Ascendant, double obliquityOfEcliptic, double geographicLatitude, Time time)
         {
+            if (double.IsNaN(Ascendant) || Ascendant is < 0 or >= 360)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(Ascendant), Ascendant, "Ascendant must be in the range [0, 360).");
+            }
+
             // The main method is taken from a post by K S Upendra on Group.IO in 2019
             // Calculate the right ascension using the formula:
             // atan(cos(obliquityOfEcliptic) * tan(tropicalAscendant))
@@ -491,9 +497,16 @@ namespace VedAstro.Library
                 180 / Math.PI;
             // Calculate the oblique ascension by subtracting the result of the following formula from the right ascension:
             // asin(tan(declination) * tan(geographicLatitude))
-            double obliqueAscension = rightAscension -
-                                      (Math.Asin(Math.Tan(declination * Math.PI / 180) *
-                                                 Math.Tan(geographicLatitude * Math.PI / 180)) * 180 / Math.PI);
+            var asinArgument = Math.Tan(declination * Math.PI / 180) *
+                               Math.Tan(geographicLatitude * Math.PI / 180);
+            if (double.IsNaN(asinArgument))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(geographicLatitude), geographicLatitude,
+                    "Latitude produces an undefined oblique ascension.");
+            }
+            asinArgument = Math.Clamp(asinArgument, -1d, 1d);
+            double obliqueAscension = rightAscension - Math.Asin(asinArgument) * 180 / Math.PI;
             // Initialize the armc variable
             double armc = 0;
             // Depending on the value of the tropical ascendant, calculate the armc using the formula:
@@ -1227,7 +1240,7 @@ namespace VedAstro.Library
                 //get location at place of time
                 var location = time.GetGeoLocation();
 
-                SwissEph swissEph = new SwissEph();
+                using SwissEph swissEph = new SwissEph();
 
                 double[] cusps = new double[13];
 
@@ -1235,7 +1248,7 @@ namespace VedAstro.Library
                 double[] ascmc = new double[10];
 
                 //set ayanamsa
-                swissEph.swe_set_sid_mode(Calculate.Ayanamsa, 0, 0);
+                swissEph.swe_set_sid_mode(Ayanamsa, 0, 0);
 
 
                 var eps = Calculate.EclipticObliquity(time);
@@ -1552,17 +1565,12 @@ namespace VedAstro.Library
 
         public static HouseName HouseAtLongitude(Dictionary<HouseName, Angle> cuspsDictionary, Angle ilong)
         {
-            HouseName hName = HouseName.Empty;
-            foreach (var h in cuspsDictionary)
+            foreach (var house in House.AllHouses)
             {
-                if (h.Value == ilong)
-                {
-                    hName = h.Key;
-                    break;
-                }
+                if (IsPlanetInHouseKP(cuspsDictionary, ilong, house)) { return house; }
             }
 
-            return hName;
+            return HouseName.Empty;
         }
 
         #endregion

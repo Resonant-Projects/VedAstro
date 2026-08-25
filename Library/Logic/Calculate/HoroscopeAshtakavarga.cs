@@ -160,7 +160,7 @@ public partial class CalculateHoroscope
         var fewBindus = Bindu(Mars, Saturn, time) is >= 1 and <= 3;
         return Result(fewBindus && ((Calculate.IsMovableSign(lagna) && Calculate.IsCommonSign(saturnSign)) ||
                                    (Calculate.IsCommonSign(lagna) && Calculate.IsMovableSign(saturnSign))),
-            time, Saturn);
+            time, Mars, Saturn);
     }
 
     [HoroscopeCalculator(HoroscopeName.MarsAshtakavargaYoga13B)]
@@ -178,7 +178,7 @@ public partial class CalculateHoroscope
         var saturnSign = Calculate.PlanetRasiD1Sign(Saturn, time).GetSignName();
         return Result(Calculate.IsMovableSign(Calculate.HouseSignName(House1, time)) &&
                       Bindu(Mars, Saturn, time) == 5 &&
-                      (Calculate.IsMovableSign(saturnSign) || Calculate.IsFixedSign(saturnSign)), time, Saturn);
+                      (Calculate.IsMovableSign(saturnSign) || Calculate.IsFixedSign(saturnSign)), time, Mars, Saturn);
     }
 
     [HoroscopeCalculator(HoroscopeName.MarsAshtakavargaYoga15)]
@@ -188,7 +188,7 @@ public partial class CalculateHoroscope
         var thirdLordSign = Calculate.PlanetRasiD1Sign(thirdLord, time).GetSignName();
         return Result(Calculate.IsFixedSign(Calculate.HouseSignName(House1, time)) &&
                       Calculate.IsCommonSign(thirdLordSign) && Bindu(Mars, thirdLord, time) == 5,
-            time, thirdLord);
+            time, Mars, thirdLord);
     }
 
     [HoroscopeCalculator(HoroscopeName.MarsAshtakavargaYoga16)]

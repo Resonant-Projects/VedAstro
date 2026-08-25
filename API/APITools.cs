@@ -16,6 +16,7 @@ namespace API;
 /// </summary>
 public static class APITools
 {
+    private const int MaximumMatchCandidates = 100;
     private static readonly HttpClient HttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(30)
@@ -101,7 +102,8 @@ public static class APITools
     }
 
     public static List<Person> GetAllPersonList() =>
-        AzureTable.PersonList.Query<PersonListEntity>()
+        AzureTable.PersonList.Query<PersonListEntity>(maxPerPage: MaximumMatchCandidates)
+            .Take(MaximumMatchCandidates)
             .Select(row => Person.FromAzureRow(row, skipLifeEvents: true))
             .ToList();
 
