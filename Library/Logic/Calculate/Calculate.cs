@@ -1609,7 +1609,7 @@ namespace VedAstro.Library
 
             //Choose the planet transit result for which predictions to be made.
 
-            //Note the transit position of the Moon with reference to
+            //Note the transit position of the selected planet with reference to
             //Natal Moon(Janma Rashi) when the chosen planet enters a new sign.
             var transitRasi = PlanetZodiacSign(transitPlanet, checkTime);
             var count = Calculate.CountFromSignToSign(lagnaRasi.GetSignName(), transitRasi.GetSignName());
@@ -1664,8 +1664,6 @@ namespace VedAstro.Library
 
         public static string Murthi(PlanetName transitPlanet, Time checkTime, Time birthTime)
         {
-            return "";
-
             //if moon retun no murthi
             if (transitPlanet == Moon) { return ""; }
 
@@ -1681,12 +1679,19 @@ namespace VedAstro.Library
 
             //Name the Moorti as follows:- •
 
-            //If the transit Moon is in 1st, 6th or 11th from Natal Moon – Swarna(Golden) Moorti.
+            //If the selected planet is in 1st, 6th or 11th from Natal Moon – Swarna(Golden) Moorti.
             //If it is in 2nd, 5th or 9th – Rajata(Silver) Moorti.
             //If it is in 3rd, 7th or 10th – Tamra(Copper) Moorti.
             //If it is in 4th, 8th or 12th – Loha(Iron) Moorti.
 
-            throw new Exception("");
+            return count switch
+            {
+                1 or 6 or 11 => "Swarna",
+                2 or 5 or 9 => "Rajata",
+                3 or 7 or 10 => "Tamra",
+                4 or 8 or 12 => "Loha",
+                _ => throw new InvalidOperationException($"Invalid transit house count: {count}.")
+            };
 
         }
 
