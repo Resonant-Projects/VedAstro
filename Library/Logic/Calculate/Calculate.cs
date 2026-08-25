@@ -64,7 +64,12 @@ namespace VedAstro.Library
         /// Defaults to RAMAN, but can be set before calling any funcs,
         /// NOTE: remember not to change mid instance, because "GetAyanamsa" & others are cached per instance
         /// </summary>
-        public static int Ayanamsa { get; set; } = (int)Library.Ayanamsa.LAHIRI;
+        private static readonly AsyncLocal<int?> AyanamsaContext = new();
+        public static int Ayanamsa
+        {
+            get => AyanamsaContext.Value ?? (int)Library.Ayanamsa.LAHIRI;
+            set => AyanamsaContext.Value = value;
+        }
 
         /// <summary>
         /// Number of days in a year. Used for dasa related calculations.
@@ -113,7 +118,11 @@ namespace VedAstro.Library
         public static JObject FindBirthTimeByAnimal(Time possibleBirthTime, double precisionHours = 1)
         {
             //get list of possible birth time slice in the current birth day
-            var timeSlices = Tools.GetTimeSlicesOnBirthDay(possibleBirthTime, 1);
+            if (!double.IsFinite(precisionHours) || precisionHours <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(precisionHours), "Precision must be positive.");
+            }
+            var timeSlices = Tools.GetTimeSlicesOnBirthDay(possibleBirthTime, precisionHours);
 
             //get predictions for each slice and place in out going list
             var compiledObj = new JObject();
@@ -135,7 +144,11 @@ namespace VedAstro.Library
         public static JObject FindBirthTimeByRisingSign(Time possibleBirthTime, double precisionHours = 1)
         {
             //get list of possible birth time slice in the current birth day
-            var timeSlices = Tools.GetTimeSlicesOnBirthDay(possibleBirthTime, 1);
+            if (!double.IsFinite(precisionHours) || precisionHours <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(precisionHours), "Precision must be positive.");
+            }
+            var timeSlices = Tools.GetTimeSlicesOnBirthDay(possibleBirthTime, precisionHours);
 
             //get predictions for each slice and place in out going list
             var compiledObj = new JObject();
@@ -901,11 +914,13 @@ namespace VedAstro.Library
             //make http call to python api server
             var timeUrl = birthTime.ToUrl();
             var callUrl = $"https://vedastrocontainer.delightfulground-a2445e4b.westus2.azurecontainerapps.io/HoroscopeLLMSearch";
-            var jsonString = $@"{{""query"":""{textInput}"",
-                                ""birth_time"":""{timeUrl}"",
-                                ""llm_model_name"":""sentence-transformers/all-MiniLM-L6-v2"",
-                                ""search_type"" : ""similarity""
-                            }}";
+            var jsonString = JsonConvert.SerializeObject(new
+            {
+                query = textInput,
+                birth_time = timeUrl,
+                llm_model_name = "sentence-transformers/all-MiniLM-L6-v2",
+                search_type = "similarity"
+            });
 
             //result is an array of found
             var rawReply = await Tools.MakePostRequest(callUrl, jsonString);
@@ -928,6 +943,11 @@ namespace VedAstro.Library
         /// </summary>
         public static string GenerateTimeListCSV(Time startTime, Time endTime, double hoursBetween)
         {
+            if (!double.IsFinite(hoursBetween) || hoursBetween <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(hoursBetween), "Hours between rows must be positive.");
+            }
+
             //make slices to fill list
             var timeSlices = Time.GetTimeListFromRange(startTime, endTime, hoursBetween);
 
@@ -1231,18 +1251,9 @@ namespace VedAstro.Library
             //var planet_degrees = Calculate.PlanetNirayanaLongitude(planetName, inputTime).TotalDegrees;
 
             // Multiply the planet's longitude by the D-chart number to get the raw divisional longitude.
-            var total_degrees = totalDegrees * divisionalNo;
-
-            // Step 2: Normalize the raw divisional longitude to the range [0, 60) degrees.
-            // This is done by subtracting 60 (the number of degrees in a zodiac sign) until the result is less than 60.
-            while (total_degrees >= 60)
-            {
-                total_degrees -= 60;
-            }
-
-            // The remaining value is the longitude of the planet in the D-chart.
-            var finalLong = Angle.FromDegrees(total_degrees);
-            return finalLong;
+            var totalDegreesInDivision = totalDegrees * divisionalNo;
+            var degreesInSign = ((totalDegreesInDivision % 30d) + 30d) % 30d;
+            return Angle.FromDegrees(degreesInSign);
         }
 
 
@@ -6073,7 +6084,7 @@ namespace VedAstro.Library
                 SwissEph ephemeris = new SwissEph();
 
                 // Convert DOB to ET
-                var jul_day_ET = Calculate.ConvertLmtToJulian(time);
+                var jul_day_ET = Calculate.TimeToJulianDay(time);
 
                 //Get planet long
                 var eclipseType = 0; /* eclipse type wanted: SE_ECL_TOTAL etc. or 0, if any eclipse type */
@@ -6114,7 +6125,7 @@ namespace VedAstro.Library
                 SwissEph ephemeris = new SwissEph();
 
                 // Convert DOB to ET
-                jul_day_ET = Calculate.ConvertLmtToJulian(time);
+                jul_day_ET = Calculate.TimeToJulianDay(time);
 
                 //Get planet long
                 var eclipseType = 0; /* eclipse type wanted: SE_ECL_TOTAL etc. or 0, if any eclipse type */
@@ -6337,24 +6348,14 @@ namespace VedAstro.Library
             {
                 if (planetLongitude == null) { return Library.Constellation.Empty; }
 
-                //if planet longitude is negative means, it before aries at 0, starts back at 360 pieces
-                if (planetLongitude.TotalDegrees < 0)
-                {
-                    planetLongitude = Angle.FromDegrees(360.0 + planetLongitude.TotalDegrees); //use plus because number is already negative
-                }
-
-                //get planet's longitude in minutes
-                var planetLongitudeInMinutes = planetLongitude.TotalMinutes;
+                var normalizedDegrees = ((planetLongitude.TotalDegrees % 360d) + 360d) % 360d;
+                var planetLongitudeInMinutes = normalizedDegrees * 60d;
 
                 //The ecliptic is divided into 27 constellations
                 //of 13° 20' (800') each. Hence divide 800
                 var roughConstellationNumber = planetLongitudeInMinutes / 800.0;
 
-                //get constellation number (rounds up)
-                var constellationNumber = (int)Math.Ceiling(roughConstellationNumber);
-
-                //if constellation number = 0, then its 1 - CPJ Added to handle 0 degree longitude items
-                if (constellationNumber == 0) { constellationNumber = 1; }
+                var constellationNumber = (int)Math.Floor(roughConstellationNumber) + 1;
 
                 //calculate quarter from remainder
                 int quarter;
@@ -6374,22 +6375,7 @@ namespace VedAstro.Library
                 var minutesInConstellation = remainder * 800.0;
                 var degreesInConstellation = new Angle(0, minutesInConstellation, 0);
 
-                var constellation = new Constellation();
-                //put together all the info of this point in the constellation
-                //CPJ Added Code Change - March 13, 2024 - to fix an error with edge cases - example 266.666667Long results in remainder = 0.
-                //CPJ - When remainder = 0, new Constellation should return next Constellation Pada 1. Hence the if-else code change
-                if (minutesInConstellation == 0)
-                {
-                    constellation = new Constellation((constellationNumber + 1), quarter, degreesInConstellation);
-                }
-                else
-                {
-
-                    constellation = new Constellation(constellationNumber, quarter, degreesInConstellation);
-                }
-
-                //return constellation value
-                return constellation;
+                return new Constellation(constellationNumber, quarter, degreesInConstellation);
             }
 
         }
@@ -6411,14 +6397,8 @@ namespace VedAstro.Library
                 //max degrees of each sign
                 const double maxDegreesInSign = 30.0;
 
-                // Adjust longitude to be within 0-360 range
-                double adjustedLongitude = longitude.TotalDegrees;
-                while (adjustedLongitude < 0)
-                {
-                    adjustedLongitude += 360.0;
-                }
-                //get rough zodiac number
-                double roughZodiacNumber = (adjustedLongitude % 360.0) / maxDegreesInSign;
+                var adjustedLongitude = ((longitude.TotalDegrees % 360d) + 360d) % 360d;
+                double roughZodiacNumber = adjustedLongitude / maxDegreesInSign;
 
                 //Calculate degrees in zodiac sign
                 //get remainder from rough zodiac number
@@ -6430,10 +6410,7 @@ namespace VedAstro.Library
                 //round number (too high accuracy causes equality mismtach because of minute difference)
                 var degreesInSign = Math.Round(degreesInSignRaw, 7);
 
-                //Get name of zodiac sign
-                //round to ceiling to get integer zodiac number
-                var zodiacNumber = (int)Math.Ceiling(roughZodiacNumber);
-                if (adjustedLongitude == 0.00) { zodiacNumber = 1; }
+                var zodiacNumber = (int)Math.Floor(roughZodiacNumber) + 1;
 
                 //convert zodiac number to zodiac name
                 var calculatedZodiac = (ZodiacName)zodiacNumber;

@@ -19,6 +19,14 @@ public class RecoveredEdgeCaseRegressionTests
         AssertTrimshamsha(ZodiacName.Taurus, 14, ZodiacName.Pisces);
         AssertTrimshamsha(ZodiacName.Taurus, 22, ZodiacName.Capricorn);
         AssertTrimshamsha(ZodiacName.Taurus, 27, ZodiacName.Scorpio);
+
+        Assert.AreEqual(6, Calculate.DivisionalLongitude(4, 9).TotalDegrees, 0.000001);
+        Assert.AreEqual(ZodiacName.Taurus, Calculate.ZodiacSignAtLongitude(Angle.FromDegrees(30)).GetSignName());
+        Assert.AreEqual(ZodiacName.Aries, Calculate.ZodiacSignAtLongitude(Angle.FromDegrees(360)).GetSignName());
+        Assert.AreEqual(ConstellationName.Aswini,
+            Calculate.ConstellationAtLongitude(Angle.Zero).GetConstellationName());
+        Assert.AreEqual(ConstellationName.Aswini,
+            Calculate.ConstellationAtLongitude(Angle.Degrees360).GetConstellationName());
     }
 
     [TestMethod]
@@ -31,6 +39,8 @@ public class RecoveredEdgeCaseRegressionTests
         Assert.IsTrue(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(350), HouseName.House12));
         Assert.IsFalse(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(5), HouseName.House12));
         Assert.IsTrue(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(5), HouseName.House1));
+        Assert.IsFalse(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(30), HouseName.House1));
+        Assert.IsTrue(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(30), HouseName.House2));
         Assert.IsFalse(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(350), HouseName.House11));
         Assert.AreEqual(HouseName.House12, CalculateKP.HouseAtLongitude(cusps, Angle.FromDegrees(350)));
 
@@ -69,6 +79,10 @@ public class RecoveredEdgeCaseRegressionTests
         Assert.ThrowsException<ArgumentOutOfRangeException>(() => CalculateKP.HoraryNumberSiderealAsc(1000));
         Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
             CalculateKP.ConvertAscToARMC(360, 23.4, 0, Time.Empty));
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
+            Calculate.GenerateTimeListCSV(Time.Empty, Time.Empty, 0));
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
+            Calculate.FindBirthTimeByAnimal(Time.Empty, 0));
     }
 
     [TestMethod]
@@ -107,6 +121,18 @@ public class RecoveredEdgeCaseRegressionTests
             TimeSpan.Zero);
 
         Assert.AreEqual(TimeRange.Empty, result);
+
+        Calculate.Ayanamsa = (int)Ayanamsa.LAHIRI;
+        var raman = Task.Run(() =>
+        {
+            Calculate.Ayanamsa = (int)Ayanamsa.RAMAN;
+            return Calculate.Ayanamsa;
+        });
+        var lahiri = Task.Run(() => Calculate.Ayanamsa);
+        Task.WaitAll(raman, lahiri);
+        Assert.AreEqual((int)Ayanamsa.RAMAN, raman.Result);
+        Assert.AreEqual((int)Ayanamsa.LAHIRI, lahiri.Result);
+        Assert.AreEqual((int)Ayanamsa.LAHIRI, Calculate.Ayanamsa);
     }
 
     private static void AssertTrimshamsha(

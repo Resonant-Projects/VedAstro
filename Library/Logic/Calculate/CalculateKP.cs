@@ -241,16 +241,16 @@ namespace VedAstro.Library
                 {
                     return (planetNirayanaDegrees.TotalDegrees >= cusps[house].TotalDegrees) &&
                            //this means that the planet falls in between these house cusps
-                           (planetNirayanaDegrees.TotalDegrees <= cusps[nextHouse].TotalDegrees);
+                           (planetNirayanaDegrees.TotalDegrees < cusps[nextHouse].TotalDegrees);
                 }
                 //if next cusp start long is smaller than current cusp we are rotating through 360 deg
                 return (planetNirayanaDegrees.TotalDegrees >= cusps[house].TotalDegrees) ||
-                       (planetNirayanaDegrees.TotalDegrees <= cusps[nextHouse].TotalDegrees);
+                       (planetNirayanaDegrees.TotalDegrees < cusps[nextHouse].TotalDegrees);
             }
 
             if (!cusps.ContainsKey(HouseName.House1)) { return false; }
             return planetNirayanaDegrees.TotalDegrees >= cusps[HouseName.House12].TotalDegrees ||
-                   planetNirayanaDegrees.TotalDegrees <= cusps[HouseName.House1].TotalDegrees;
+                   planetNirayanaDegrees.TotalDegrees < cusps[HouseName.House1].TotalDegrees;
         }
 
         /// <summary>
@@ -411,7 +411,9 @@ namespace VedAstro.Library
 
             var eps = Calculate.EclipticObliquity(time);
 
-            var armc = ConvertAscToARMC(rotateDegrees, eps, location.Latitude(), time);
+            var ayanamsa = Calculate.AyanamsaDegree(time).TotalDegrees;
+            var tropicalAscendant = (rotateDegrees + ayanamsa) % 360d;
+            var armc = ConvertAscToARMC(tropicalAscendant, eps, location.Latitude(), time);
 
             var lat = location.Latitude();
 
@@ -423,8 +425,8 @@ namespace VedAstro.Library
             foreach (var house in House.AllHouses)
             {
                 //start of house longitude of 0-360
-                var hseLong = cusps[(int)house];
-                housesDictionary.Add(house, Angle.FromDegrees(hseLong));
+                var siderealLongitude = swissEph.swe_degnorm(cusps[(int)house] - ayanamsa);
+                housesDictionary.Add(house, Angle.FromDegrees(siderealLongitude));
             }
 
             //return cusps;
@@ -450,7 +452,9 @@ namespace VedAstro.Library
             var eps = Calculate.EclipticObliquity(time);
 
             var lat = location.Latitude();
-            var armc = ConvertAscToARMC(rotateDegrees, eps, lat, time);
+            var ayanamsa = Calculate.AyanamsaDegree(time).TotalDegrees;
+            var tropicalAscendant = (rotateDegrees + ayanamsa) % 360d;
+            var armc = ConvertAscToARMC(tropicalAscendant, eps, lat, time);
             swissEph.swe_houses_armc(armc, lat, eps, 'P', cusps, ascmc);
 
 
@@ -459,8 +463,8 @@ namespace VedAstro.Library
             foreach (var house in House.AllHouses)
             {
                 //start of house longitude of 0-360
-                var hseLong = cusps[(int)house];
-                housesDictionary.Add(house, Angle.FromDegrees(hseLong));
+                var siderealLongitude = swissEph.swe_degnorm(cusps[(int)house] - ayanamsa);
+                housesDictionary.Add(house, Angle.FromDegrees(siderealLongitude));
             }
 
             //return cusps;
