@@ -261,8 +261,6 @@ public partial class Calculate
     /// </summary>
     public static DashaPeriod GetCharaDasaAtTime(Time birthTime, Time checkTime)
     {
-        ArgumentNullException.ThrowIfNull(birthTime);
-        ArgumentNullException.ThrowIfNull(checkTime);
         if (checkTime < birthTime)
         {
             throw new ArgumentOutOfRangeException(nameof(checkTime), "Check time cannot precede birth time.");
@@ -272,9 +270,9 @@ public partial class Calculate
         var majorSigns = SignsInDirection(lagna, IsOddSign(lagna));
         var majorStart = birthTime;
 
-        // Chara Dasha repeats after its twelve sign periods. Iterating also keeps
-        // the method useful for check times beyond the first nominal cycle.
-        for (var cycle = 0; cycle < 20; cycle++)
+        // Chara Dasha repeats after its twelve sign periods. Continue until the
+        // requested time is covered instead of imposing an arbitrary horizon.
+        while (majorStart <= checkTime)
         {
             foreach (var majorSign in majorSigns)
             {
@@ -301,7 +299,7 @@ public partial class Calculate
             }
         }
 
-        throw new InvalidOperationException("Chara Dasha period was not found within twenty cycles.");
+        throw new InvalidOperationException("Chara Dasha period was not found for the requested time.");
 
         static List<ZodiacName> SignsInDirection(ZodiacName start, bool forward)
         {
@@ -337,7 +335,6 @@ public partial class Calculate
     /// </summary>
     public static TimeRange AutoCalculateTimeRange(Time inputBirthTime, string timePreset, TimeSpan outputTimezone)
     {
-        ArgumentNullException.ThrowIfNull(inputBirthTime);
         if (string.IsNullOrWhiteSpace(timePreset)) return TimeRange.Empty;
 
         var preset = Regex.Replace(timePreset.Trim().ToLowerInvariant(), @"\s+", string.Empty);

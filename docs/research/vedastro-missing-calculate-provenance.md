@@ -95,6 +95,8 @@ Useful commands:
 ```bash
 git fetch https://github.com/VedAstro/VedAstro.git \
   refs/tags/40763952-2665-stable:refs/tags/upstream-40763952-2665-stable
+test "$(git rev-parse upstream-40763952-2665-stable^{commit})" = \
+  "40763952742f76369a505d8db2e9e9fa67f75d78" || exit 1
 git show upstream-40763952-2665-stable:Library/Logic/Calculate/Calculate.cs
 ```
 

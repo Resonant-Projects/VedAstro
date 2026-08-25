@@ -194,13 +194,10 @@ namespace VedAstro.Library
             //get sign 2nd house from moon
             var moon2ndHseSign = Calculate.SignCountedFromPlanetSign(2, Moon, birthTime);
 
-            //get planets in that 2nd hse sign
-            var planetsIn2 = Calculate.PlanetsInSign(moon2ndHseSign, birthTime);
-
             //The Sun is not counted, but it must not suppress another
             //qualifying planet in the same sign.
-            planetsIn2.RemoveAll(planet => planet == Sun);
-            var isOccuring = planetsIn2.Any();
+            var isOccuring = Calculate.PlanetsInSign(moon2ndHseSign, birthTime)
+                .Any(planet => planet != Sun);
 
             return CalculatorResult.New(isOccuring, new[] { House2 }, new[] { Moon }, birthTime);
         }
@@ -220,18 +217,11 @@ namespace VedAstro.Library
             //If there are planets in the 12th from moon
             var moon12ndHseSign = Calculate.SignCountedFromPlanetSign(12, Moon, birthTime);
 
-            //get planets in that 12th hse sign from moon
-            var planetsIn12 = Calculate.PlanetsInSign(moon12ndHseSign, birthTime);
-
             //Remarks.- In Anapha also the Sun is not taken
             //into account. The remarks made for Sunapha apply
             //to this also with slight variation.
-
-            //remove sun if found
-            planetsIn12.RemoveAll(x => x.Name == PlanetNameEnum.Sun);
-
-            //both conditions have to be met
-            var isOccuring = planetsIn12.Any();
+            var isOccuring = Calculate.PlanetsInSign(moon12ndHseSign, birthTime)
+                .Any(planet => planet != Sun);
 
             return CalculatorResult.New(isOccuring, new[] { House12 }, new[] { Moon }, birthTime);
         }
@@ -281,9 +271,9 @@ namespace VedAstro.Library
             var noPlanetsInBottom = Calculate.PlanetsInSign(bottomSideSign, birthTime).Any(planet => planet != Sun) == false;
 
             //no planets on both sides of the Moon
-            var planetOnBothSides = noPlanetsInBottom && noPlanetsInTop;
+            var noPlanetOnEitherSide = noPlanetsInBottom && noPlanetsInTop;
 
-            return CalculatorResult.New(planetOnBothSides, new[] { Moon }, birthTime);
+            return CalculatorResult.New(noPlanetOnEitherSide, new[] { Moon }, birthTime);
         }
 
         /// <summary>

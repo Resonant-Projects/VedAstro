@@ -32,6 +32,9 @@ public class RecoveredEdgeCaseRegressionTests
         Assert.IsFalse(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(5), HouseName.House12));
         Assert.IsTrue(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(5), HouseName.House1));
         Assert.IsFalse(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(350), HouseName.House11));
+
+        cusps.Remove(HouseName.House1);
+        Assert.IsFalse(CalculateKP.IsPlanetInHouseKP(cusps, Angle.FromDegrees(350), HouseName.House12));
     }
 
     [TestMethod]
@@ -72,6 +75,8 @@ public class RecoveredEdgeCaseRegressionTests
 
         Assert.AreEqual(77.575, location.Longitude(), 0.000001);
         Assert.AreEqual(12.977, location.Latitude(), 0.000001);
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() =>
+            new GeoLocation("Unrecoverable", 99999999999, 99999999999));
     }
 
     [TestMethod]

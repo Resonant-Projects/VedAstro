@@ -271,7 +271,8 @@ namespace VedAstro.Library
                     //overwrite visitor id with user id
                     var modifiedPerson = personOriRecord.Clone();
                     modifiedPerson.PartitionKey = ownerId;
-                    AzureTable.PersonList.AddEntity(modifiedPerson);
+                    modifiedPerson.ETag = default;
+                    AzureTable.PersonList.UpsertEntity(modifiedPerson);
 
                     //2: delete original "visitor" record
                     await AzureTable.PersonList.DeleteEntityAsync(personOriRecord.PartitionKey, personOriRecord.RowKey);
@@ -1220,22 +1221,8 @@ namespace VedAstro.Library
         /// <returns>The divisional longitude of the planet in the specified D-chart.</returns>
         public static Angle PlanetDivisionalLongitude(PlanetName planetName, Time inputTime, int divisionalNo)
         {
-            // Step 1: Get the Nirayana (sidereal) longitude of the planet at the given time.
-            var planet_degrees = Calculate.PlanetNirayanaLongitude(planetName, inputTime).TotalDegrees;
-
-            // Multiply the planet's longitude by the D-chart number to get the raw divisional longitude.
-            var total_degrees = planet_degrees * divisionalNo;
-
-            // Step 2: Normalize the raw divisional longitude to the range [0, 60) degrees.
-            // This is done by subtracting 60 (the number of degrees in a zodiac sign) until the result is less than 60.
-            while (total_degrees >= 60)
-            {
-                total_degrees -= 60;
-            }
-
-            // The remaining value is the longitude of the planet in the D-chart.
-            var finalLong = Angle.FromDegrees(total_degrees);
-            return finalLong;
+            var longitude = PlanetNirayanaLongitude(planetName, inputTime);
+            return DivisionalLongitude(longitude.TotalDegrees, divisionalNo);
         }
 
         public static Angle DivisionalLongitude(double totalDegrees, int divisionalNo)
@@ -1533,13 +1520,30 @@ namespace VedAstro.Library
                 var target = PlanetNirayanaLongitude(Sun, birthTime).TotalDegrees;
                 var candidate = birthTime.AddHours(elapsedYears * 365.256374d * 24d);
                 const double meanSunDegreesPerHour = 0.98564736d / 24d;
+                const double toleranceDegrees = 1d / 3600d;
+                var converged = false;
 
                 for (var iteration = 0; iteration < 8; iteration++)
                 {
                     var longitude = PlanetNirayanaLongitude(Sun, candidate).TotalDegrees;
                     var difference = ((longitude - target + 540d) % 360d) - 180d;
-                    if (Math.Abs(difference) <= 1d / 3600d) { break; }
+                    if (Math.Abs(difference) <= toleranceDegrees)
+                    {
+                        converged = true;
+                        break;
+                    }
                     candidate = candidate.SubtractHours(difference / meanSunDegreesPerHour);
+                }
+
+                if (!converged)
+                {
+                    var finalLongitude = PlanetNirayanaLongitude(Sun, candidate).TotalDegrees;
+                    var finalDifference = ((finalLongitude - target + 540d) % 360d) - 180d;
+                    if (Math.Abs(finalDifference) > toleranceDegrees)
+                    {
+                        throw new InvalidOperationException(
+                            $"Tajika solar return for {scanYear} did not converge within one arcsecond.");
+                    }
                 }
 
                 return candidate;

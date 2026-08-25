@@ -139,6 +139,11 @@ public static class APITools
         Stream file,
         CancellationToken cancellationToken = default)
     {
+        if (!System.Net.Mail.MailAddress.TryCreate(receiverEmailAddress, out _))
+        {
+            throw new ArgumentException("Receiver email address is not valid.", nameof(receiverEmailAddress));
+        }
+
         var extension = fileFormat.ToLowerInvariant();
         var fullName = $"{fileName}.{extension}";
         var content = new EmailContent($"Shared {fileFormat.ToUpperInvariant()} from VedAstro")

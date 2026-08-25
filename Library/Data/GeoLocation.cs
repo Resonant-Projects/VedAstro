@@ -96,8 +96,17 @@ namespace VedAstro.Library
             else //abnormal input, auto correct decimal place as most likely fault (heavy computation use only when sure fail)
             {
                 IsValidLatitudeLongitude(longitude, latitude);
-                _longitude = longitudeIsValid ? longitude : CorrectDecimalPoint(longitude);
-                _latitude = latitudeIsValid ? latitude : CorrectDecimalPoint(latitude);
+                var correctedLongitude = longitudeIsValid ? longitude : CorrectDecimalPoint(longitude);
+                var correctedLatitude = latitudeIsValid ? latitude : CorrectDecimalPoint(latitude);
+                if (!IsValidLatitudeLongitude(correctedLongitude, correctedLatitude))
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(latitude),
+                        $"Coordinates could not be recovered: {longitude}, {latitude}");
+                }
+
+                _longitude = correctedLongitude;
+                _latitude = correctedLatitude;
             }
         }
 

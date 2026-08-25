@@ -8,6 +8,13 @@ namespace VedAstro.Library.Tests
     [TestClass()]
     public class CalculateJaiminiTests
     {
+        [TestInitialize]
+        public void ResetCalculationSettings()
+        {
+            Calculate.Ayanamsa = (int)Ayanamsa.LAHIRI;
+            Calculate.SolarYearTimeSpan = 365.35;
+        }
+
         [TestMethod()]
         [Ignore("Awaiting an authoritative structured fixture for the recovered Chara Dasa implementation.")]
         public void JaiminiCahraDasaTest()
@@ -28,8 +35,8 @@ namespace VedAstro.Library.Tests
             Assert.AreEqual(ZodiacName.Pisces, charaDasa.SubSign,
                 $"Major period: {charaDasa.MajorSign}; sub-period: {charaDasa.SubSign}");
 
-            var planetsAspectingSign = Calculate.SignsPlanetIsAspecting(PlanetName.Mercury, testHoroscope);
-            CollectionAssert.Contains(planetsAspectingSign, ZodiacName.Pisces);
+            var signsMercuryAspects = Calculate.SignsPlanetIsAspecting(PlanetName.Mercury, testHoroscope);
+            CollectionAssert.Contains(signsMercuryAspects, ZodiacName.Pisces);
 
         }
 

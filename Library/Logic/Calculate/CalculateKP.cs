@@ -225,31 +225,32 @@ namespace VedAstro.Library
         {
             //HouseName is one-based; House12 wraps to the first cusp.
             var houseNumber = (int)house;
-            if (houseNumber >= (int)HouseName.House1 &&
-                houseNumber <= (int)HouseName.House12 &&
-                cusps.ContainsKey(house))
+            if (houseNumber < (int)HouseName.House1 || houseNumber > (int)HouseName.House12 ||
+                !cusps.ContainsKey(house))
             {
+                return false;
+            }
+
+            if (houseNumber < (int)HouseName.House12)
+            {
+                var nextHouse = (HouseName)(houseNumber + 1);
+                if (!cusps.ContainsKey(nextHouse)) { return false; }
+
                 //check if cusp longitude is smaller than next cusp longitude
-                if (houseNumber < (int)HouseName.House12 && cusps[(HouseName)houseNumber + 1] > cusps[(HouseName)houseNumber])
+                if (cusps[nextHouse] > cusps[house])
                 {
-                    return (planetNirayanaDegrees.TotalDegrees >= cusps[(HouseName)houseNumber].TotalDegrees) &&
+                    return (planetNirayanaDegrees.TotalDegrees >= cusps[house].TotalDegrees) &&
                            //this means that the planet falls in between these house cusps
-                           (planetNirayanaDegrees.TotalDegrees <= cusps[(HouseName)houseNumber + 1].TotalDegrees);
+                           (planetNirayanaDegrees.TotalDegrees <= cusps[nextHouse].TotalDegrees);
                 }
                 //if next cusp start long is smaller than current cusp we are rotating through 360 deg
-                else if (houseNumber < (int)HouseName.House12)
-                {
-                    return (planetNirayanaDegrees.TotalDegrees >= cusps[(HouseName)houseNumber].TotalDegrees) ||
-                           (planetNirayanaDegrees.TotalDegrees <= cusps[(HouseName)houseNumber + 1].TotalDegrees);
-                }
-                // If houseNumber is the last index in the cusps array
-                else
-                {
-                    return planetNirayanaDegrees.TotalDegrees >= cusps[HouseName.House12].TotalDegrees ||
-                           planetNirayanaDegrees.TotalDegrees <= cusps[HouseName.House1].TotalDegrees;
-                }
+                return (planetNirayanaDegrees.TotalDegrees >= cusps[house].TotalDegrees) ||
+                       (planetNirayanaDegrees.TotalDegrees <= cusps[nextHouse].TotalDegrees);
             }
-            return false;
+
+            if (!cusps.ContainsKey(HouseName.House1)) { return false; }
+            return planetNirayanaDegrees.TotalDegrees >= cusps[HouseName.House12].TotalDegrees ||
+                   planetNirayanaDegrees.TotalDegrees <= cusps[HouseName.House1].TotalDegrees;
         }
 
         /// <summary>

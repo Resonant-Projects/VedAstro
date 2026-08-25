@@ -1201,7 +1201,7 @@ namespace VedAstro.Library.Tests
         {
             var strength = Calculate.AbstractActivityStrength(StandardHoroscope, StandardHoroscope);
 
-            Assert.AreEqual(0.045, strength);
+            Assert.AreEqual(0.045, strength, 0.000001);
         }
 
         [TestMethod()]

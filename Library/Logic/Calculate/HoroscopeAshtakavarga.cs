@@ -303,9 +303,11 @@ public partial class CalculateHoroscope
     private static HouseName HouseOf(PlanetName planet, Time time) =>
         Calculate.HousePlanetOccupiesBasedOnSign(planet, time);
 
-    private static bool InKendra(PlanetName planet, Time time, bool includeLagna) =>
-        HouseOf(planet, time) is House4 or House7 or House10 ||
-        (includeLagna && HouseOf(planet, time) == House1);
+    private static bool InKendra(PlanetName planet, Time time, bool includeLagna)
+    {
+        var house = HouseOf(planet, time);
+        return house is House4 or House7 or House10 || (includeLagna && house == House1);
+    }
 
     private static bool InKendraOrTrikona(PlanetName planet, Time time) =>
         HouseOf(planet, time) is House1 or House4 or House5 or House7 or House9 or House10;
