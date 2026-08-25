@@ -153,6 +153,7 @@ public static class APITools
         };
         var message = new EmailMessage("contact@vedastro.org", receiverEmailAddress, content);
         var mimeType = Tools.StringToMimeType(fileFormat) ?? MediaTypeNames.Application.Octet;
+        if (file.CanSeek) { file.Position = 0; }
         message.Attachments.Add(new EmailAttachment(fullName, mimeType, BinaryData.FromStream(file)));
 
         var operation = await EmailClient.Value.SendAsync(WaitUntil.Completed, message, cancellationToken);

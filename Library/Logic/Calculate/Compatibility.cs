@@ -233,7 +233,7 @@ public partial class Calculate
 
         // DateTimeOffset requires offsets in whole minutes. One degree of
         // longitude is four minutes of local mean time.
-        return TimeSpan.FromMinutes(Math.Round(longitudeDeg * 4.0));
+        return TimeSpan.FromMinutes(Math.Round(longitudeDeg * 4.0, MidpointRounding.AwayFromZero));
     }
 
     /// <summary>
@@ -383,21 +383,37 @@ public partial class Calculate
         var relative = Regex.Match(preset, @"^(?<count>\d+)?(?<unit>hour|hours|today|day|days|week|weeks|month|months|year|years|decade|decades)$");
         if (!relative.Success) return TimeRange.Empty;
 
-        var count = relative.Groups["count"].Success ? int.Parse(relative.Groups["count"].Value) : 1;
+        var count = 1;
+        if (relative.Groups["count"].Success &&
+            !int.TryParse(relative.Groups["count"].Value, out count))
+        {
+            return TimeRange.Empty;
+        }
         count = Math.Max(1, count);
         var unit = relative.Groups["unit"].Value;
         var currentTime = new Time(now, location);
 
-        return unit switch
+        try
         {
-            "hour" or "hours" => new TimeRange(new Time(now.AddHours(-1), location), new Time(now.AddHours(count), location)),
-            "today" or "day" or "days" => new TimeRange(StartOfDay(now.AddDays(-1)), currentTime.AddHours(Tools.DaysToHours(count))),
-            "week" or "weeks" => new TimeRange(StartOfDay(now.AddDays(-1)), currentTime.AddHours(Tools.DaysToHours(count * 7))),
-            "month" or "months" => new TimeRange(StartOfDay(now.AddDays(-7)), currentTime.AddHours(Tools.DaysToHours(count * 30))),
-            "year" or "years" => new TimeRange(StartOfDay(now.AddDays(-182)), currentTime.AddHours(Tools.DaysToHours(count * 365))),
-            "decade" or "decades" => new TimeRange(StartOfDay(now.AddDays(-365)), currentTime.AddHours(Tools.DaysToHours(count * 3652))),
-            _ => TimeRange.Empty
-        };
+            return unit switch
+            {
+                "hour" or "hours" => new TimeRange(new Time(now.AddHours(-1), location), new Time(now.AddHours(count), location)),
+                "today" or "day" or "days" => new TimeRange(StartOfDay(now.AddDays(-1)), currentTime.AddHours(Tools.DaysToHours(count))),
+                "week" or "weeks" => new TimeRange(StartOfDay(now.AddDays(-1)), currentTime.AddHours(Tools.DaysToHours(count * 7d))),
+                "month" or "months" => new TimeRange(StartOfDay(now.AddDays(-7)), currentTime.AddHours(Tools.DaysToHours(count * 30d))),
+                "year" or "years" => new TimeRange(StartOfDay(now.AddDays(-182)), currentTime.AddHours(Tools.DaysToHours(count * 365d))),
+                "decade" or "decades" => new TimeRange(StartOfDay(now.AddDays(-365)), currentTime.AddHours(Tools.DaysToHours(count * 3652d))),
+                _ => TimeRange.Empty
+            };
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return TimeRange.Empty;
+        }
+        catch (OverflowException)
+        {
+            return TimeRange.Empty;
+        }
 
         Time StartOfDay(DateTimeOffset value) =>
             new(new DateTimeOffset(value.Year, value.Month, value.Day, 0, 0, 0, outputTimezone), location);

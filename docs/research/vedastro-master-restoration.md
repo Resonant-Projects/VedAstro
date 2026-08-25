@@ -67,7 +67,7 @@ The six-arc-second House 1 difference is from exercising the local route with ex
 
 ### Full legacy suite
 
-The complete `LibraryTests` run now reports 86 passed, 9 skipped, and 0 failed out of 95. The suite resets mutable calculation settings before every `CalculateTests` case, replaces debugger-era `Assert.Fail` calls with deterministic behavioral assertions, uses type-correct contracts for Pancha Pakshi activity results, and adds focused regressions for recovered compatibility, unsupported calculations, coordinate recovery, and divisional/KP edge cases.
+The complete `LibraryTests` run now reports 87 passed, 9 skipped, and 0 failed out of 96. The suite resets mutable calculation settings before every `CalculateTests` case, replaces debugger-era `Assert.Fail` calls with deterministic behavioral assertions, uses type-correct contracts for Pancha Pakshi activity results, and adds focused regressions for recovered compatibility, unsupported calculations, input overflow/rounding, coordinate recovery, and divisional/KP edge cases.
 
 The nine skipped tests remain named and carry explicit reasons:
 

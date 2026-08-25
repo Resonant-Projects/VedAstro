@@ -89,6 +89,23 @@ public class RecoveredEdgeCaseRegressionTests
         Assert.AreEqual(Shashtiamsa.Zero, Calculate.PlanetDigBala(PlanetName.Gulika, time));
     }
 
+    [TestMethod]
+    public void CompatibilityInputsRoundDeterministicallyAndRejectOverflow()
+    {
+        Assert.AreEqual(TimeSpan.FromMinutes(1), Calculate.LongitudeToLMTOffset(0.125));
+        Assert.AreEqual(TimeSpan.FromMinutes(-1), Calculate.LongitudeToLMTOffset(-0.125));
+
+        var birthTime = new Time(
+            "12:00 01/01/2000 +00:00",
+            new GeoLocation("Greenwich", 0, 51.4934));
+        var result = Calculate.AutoCalculateTimeRange(
+            birthTime,
+            "999999999999years",
+            TimeSpan.Zero);
+
+        Assert.AreEqual(TimeRange.Empty, result);
+    }
+
     private static void AssertTrimshamsha(
         ZodiacName sourceSign,
         double degrees,
