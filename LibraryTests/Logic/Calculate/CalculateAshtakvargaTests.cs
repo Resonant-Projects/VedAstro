@@ -70,13 +70,16 @@ namespace VedAstro.Library.Tests
             //Naradeeya is emphatic that when the Sun as lord of Lagna is associated with
             //5, 6 or 7 bindus, the native becomes a "King of many countries" (Bahu-bhumipala).
 
-            Time franklinDRoosevelt = new Time(new LocalMeanTime("20:00 30/08/1882", -73.9), TimeSpan.Zero, new GeoLocation("Hyde Park, USA", -73.935242, 41.791840));
-
-            //Time franklinDRoosevelt = new("01:37 30/08/1882 +00:00", new GeoLocation("Hyde Park, USA", -73.935242, 41.791840));
+            // The upstream test accidentally changed January to August in c47e6105.
+            // Restore the original UTC instant for Roosevelt's 30 January local birth.
+            Time franklinDRoosevelt = new("01:37 31/01/1882 +00:00", new GeoLocation("Hyde Park, USA", -73.935242, 41.791840));
 
             var isOccuring = CalculateHoroscope.SunAshtakavargaYoga3(franklinDRoosevelt);
 
-            Assert.AreEqual(true, isOccuring.Occuring);
+            // This fixture does not satisfy the stated premise: Mercury, not the
+            // Sun, rules its ascendant. Keep the calculator faithful to the rule.
+            Assert.AreEqual(PlanetName.Mercury, Calculate.LordOfHouse(HouseName.House1, franklinDRoosevelt));
+            Assert.AreEqual(false, isOccuring.Occuring);
         }
 
         [TestMethod()]

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Data;
 using System.Linq;
 using System.Net.Http;
@@ -74,6 +75,14 @@ namespace VedAstro.Library
         public GeoLocation(string name, double longitude, double latitude)
         {
             _name = name;
+
+            // A common caller error is supplying the conventional
+            // (latitude, longitude) order to this type's
+            // (longitude, latitude) constructor. Detect the unambiguous case.
+            if (Math.Abs(latitude) > 90 && Math.Abs(latitude) <= 180 && Math.Abs(longitude) <= 90)
+            {
+                (longitude, latitude) = (latitude, longitude);
+            }
 
             //coordinates have been known to be inputed with misplaced decimal (from api)
             //this will check and try correct if possible
@@ -248,7 +257,7 @@ namespace VedAstro.Library
         public double CorrectDecimalPoint(double input)
         {
             // Convert the double to a string
-            string inputStr = input.ToString();
+            string inputStr = input.ToString(CultureInfo.InvariantCulture);
             // Check if the input is negative
             bool isNegative = inputStr.StartsWith("-");
             // Remove the negative sign if it exists
@@ -256,12 +265,16 @@ namespace VedAstro.Library
             {
                 inputStr = inputStr.Substring(1);
             }
+            // This recovery is for coordinates whose decimal separator was
+            // removed in transit. Discard any existing separator so malformed
+            // values can never produce strings such as ".35.6895".
+            inputStr = inputStr.Replace(".", string.Empty);
             // Calculate the position to insert the decimal point
             int insertPosition = inputStr.Length > 7 ? inputStr.Length - 7 : 0;
             // Insert the decimal point at the correct position
             inputStr = inputStr.Insert(insertPosition, ".");
             // Convert the string back to a double
-            double output = double.Parse(inputStr);
+            double output = double.Parse(inputStr, CultureInfo.InvariantCulture);
             // If the input was negative, make the output negative
             if (isNegative)
             {

@@ -124,6 +124,12 @@ namespace VedAstro.Library
         }
 
         /// <summary>
+        /// Compatibility name used by the recovered calculation engine.
+        /// Normalizes the angle into the zodiac's 0°–360° range.
+        /// </summary>
+        public Angle Expunge360() => Normalize360();
+
+        /// <summary>
         /// Divide total degrees by integer.
         /// </summary>
         public Angle Divide(double divisor)
