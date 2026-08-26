@@ -70,6 +70,7 @@
 		<PackageReference Include="Azure.AI.OpenAI" Version="1.0.0-beta.17" />
 		<PackageReference Include="Azure.Data.Tables" Version="12.9.1" />
 		<PackageReference Include="EPPlus" Version="7.0.0-beta1" />
+		<PackageReference Include="GeoTimeZone" Version="6.1.0" />
 		<PackageReference Include="HtmlAgilityPack" Version="1.11.53" />
 		<PackageReference Include="Microsoft.Azure.Functions.Worker.Core" Version="1.17.0" />
 		<PackageReference Include="Microsoft.Bing.Search.ImageSearch" Version="1.0.0" />
@@ -81,6 +82,7 @@
 		<PackageReference Include="Svg" Version="3.4.4" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 		<PackageReference Include="SwissEphNet" Version="2.8.0.2" />
+		<PackageReference Include="TimeZoneConverter" Version="7.2.0" />
 		<PackageReference Include="Azure.Storage.Blobs" Version="12.23.0" />
 
 	</ItemGroup>

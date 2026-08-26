@@ -83,7 +83,7 @@ namespace API
             catch (Exception e)
             {
                 APILogger.Error(e, incomingRequest);
-                return APITools.FailMessageJson(e.Message, incomingRequest);
+                return APITools.FailMessageJson(APITools.GetInnermostExceptionMessage(e), incomingRequest);
             }
 
         }

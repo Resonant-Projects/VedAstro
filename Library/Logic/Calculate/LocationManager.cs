@@ -13,6 +13,9 @@ using Newtonsoft.Json;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Threading;
+using GeoTimeZone;
+using TimeZoneConverter;
 
 namespace VedAstro.Library
 {
@@ -22,6 +25,12 @@ namespace VedAstro.Library
     /// </summary>
     public class LocationManager
     {
+        private const string DefaultNominatimUrl = "https://nominatim.openstreetmap.org";
+        private const string NominatimUserAgent = "VedAstro-Resonant/1.0 (+https://github.com/Resonant-Projects/VedAstro)";
+        private static readonly HttpClient NominatimClient = CreateNominatimClient();
+        private static readonly SemaphoreSlim NominatimRequestGate = new(1, 1);
+        private static DateTimeOffset _lastNominatimRequestUtc = DateTimeOffset.MinValue;
+
         /// <summary>
         /// sample holder type when doing interop
         /// </summary>
@@ -50,7 +59,7 @@ namespace VedAstro.Library
 
         public enum APIProvider
         {
-            VedAstro, Azure, Google, IpData, CPU,
+            VedAstro, Nominatim, Tzdb, Azure, Google, IpData,
             LocalFile
         }
 
@@ -172,6 +181,7 @@ namespace VedAstro.Library
             var geoLocationProviders = new Dictionary<APIProvider, Func<string, Task<GeoLocationRawAPI>>>
             {
                 {APIProvider.VedAstro, AddressToGeoLocation_VedAstro},
+                {APIProvider.Nominatim, AddressToGeoLocation_Nominatim},
                 {APIProvider.Azure, AddressToGeoLocation_Azure},
                 {APIProvider.Google, AddressToGeoLocation_Google},
                 {APIProvider.LocalFile, AddressToGeoLocation_LocalFile},
@@ -212,6 +222,11 @@ namespace VedAstro.Library
             }
 
             //2 : SEND TO CALLER
+            if (parsedGeoLocation.Name() == GeoLocation.Empty.Name())
+            {
+                throw new InvalidOperationException($"Address lookup failed for '{userInputAddressRaw}': all geocoding providers were exhausted.");
+            }
+
             return parsedGeoLocation;
         }
 
@@ -226,6 +241,7 @@ namespace VedAstro.Library
             var geoLocationProviders = new Dictionary<APIProvider, Func<string, Task<GeoLocationRawAPI>>>
             {
                 {APIProvider.VedAstro, SearchAddressToGeoLocation_VedAstro},
+                {APIProvider.Nominatim, SearchAddressToGeoLocation_Nominatim},
                 {APIProvider.Azure, SearchAddressToGeoLocation_Azure},
             };
 
@@ -405,10 +421,10 @@ namespace VedAstro.Library
             var geoLocationProviders = new Dictionary<APIProvider, Func<GeoLocation, DateTimeOffset, Task<GeoLocationRawAPI>>>
             {
                 {APIProvider.VedAstro, GeoLocationToTimezone_Vedastro},
+                {APIProvider.Tzdb, GeoLocationToTimezone_Tzdb},
                 {APIProvider.Azure, GeoLocationToTimezone_Azure},
                 {APIProvider.Google, GeoLocationToTimezone_Google},
                 {APIProvider.LocalFile, GeoLocationToTimezone_LocalFile},
-                {APIProvider.CPU, GeoLocationToTimezone_CPU}, //NOTE: last resort option for testing locally (not accurate)
             };
 
             //start with empty as default if fail
@@ -434,8 +450,7 @@ namespace VedAstro.Library
                 var isNotEmpty = !(string.IsNullOrEmpty(timezoneStr));
                 var apiProvider = row.Key;
                 var isNotVedAstro = apiProvider != APIProvider.VedAstro;
-                var isNotCpu = apiProvider != APIProvider.CPU;
-                if (isNotEmpty && isNotVedAstro && isNotCpu)
+                if (isNotEmpty && isNotVedAstro)
                 {
                     //NOTE: to support local development, since saving to azure db will be unavailable
                     try
@@ -675,29 +690,37 @@ namespace VedAstro.Library
 
         }
 
-        private async Task<GeoLocationRawAPI> GeoLocationToTimezone_CPU(GeoLocation geoLocation, DateTimeOffset timeAtLocation)
+        private static async Task<GeoLocationRawAPI> GeoLocationToTimezone_Tzdb(GeoLocation geoLocation, DateTimeOffset timeAtLocation)
         {
-            //based on coordinates calculate possible timezone
-            var timezoneText = Tools.GetTimezoneOffsetLocal(geoLocation, timeAtLocation.UtcDateTime);
+            var ianaTimeZoneId = TimeZoneLookup
+                .GetTimeZone(geoLocation.Latitude(), geoLocation.Longitude())
+                .Result;
+            var timeZoneInfo = TZConvert.GetTimeZoneInfo(ianaTimeZoneId);
+            var offset = timeZoneInfo.GetUtcOffset(timeAtLocation);
+            var timezoneText = Tools.TimeSpanToUTCTimezoneString(offset);
 
-            //get time in standard format without timezone
-            var rawString = timeAtLocation.ToString(Time.DateTimeFormat);
+            var metadataRow = new GeoLocationTimezoneMetadataEntity
+            {
+                TimezoneText = timezoneText,
+                StandardOffset = Tools.TimeSpanToUTCTimezoneString(timeZoneInfo.BaseUtcOffset),
+                DaylightSavings = Tools.TimeSpanToUTCTimezoneString(offset - timeZoneInfo.BaseUtcOffset),
+                Tag = string.Empty,
+                Standard_Name = timeZoneInfo.StandardName,
+                Daylight_Name = timeZoneInfo.DaylightName,
+                ISO_Name = ianaTimeZoneId,
+                RowKey = "0",
+            };
+            metadataRow.PartitionKey = metadataRow.CalculateCombinedHash();
 
-            //time at place date time format no timezone
-            var timeAtLocationString = rawString.Replace('/', '-');
+            var timezoneRow = new GeoLocationTimezoneEntity
+            {
+                PartitionKey = geoLocation.ToPartitionKey(),
+                RowKey = timeAtLocation.ToRowKey(),
+                TimezoneText = timezoneText,
+                MetadataHash = metadataRow.PartitionKey,
+            };
 
-            //round to stop overcrowding db (maybe not relevant here)
-            var roundedLong1DeciPlaces11Km = Math.Round(geoLocation.Longitude(), 1).ToString();
-            var roundedLat1DeciPlaces11Km = Math.Round(geoLocation.Latitude(), 1).ToString();
-
-            //latitude & longitude in google search friendly format
-            var latLongAsId = $"{roundedLat1DeciPlaces11Km},{roundedLong1DeciPlaces11Km}";
-
-            //get timezone data out
-            var foundRaw = new GeoLocationTimezoneEntity() { PartitionKey = latLongAsId, RowKey = timeAtLocationString, TimezoneText = timezoneText, MetadataHash = "" };
-
-            //we don't supply metadata cause not needed, as separate query
-            return new GeoLocationRawAPI(foundRaw, null);
+            return new GeoLocationRawAPI(timezoneRow, metadataRow);
         }
 
         /// <summary>
@@ -734,6 +757,130 @@ namespace VedAstro.Library
             //we don't supply metadata cause not needed, as separate query
             return new GeoLocationRawAPI(foundRaw, null);
 
+        }
+
+        private static async Task<GeoLocationRawAPI> AddressToGeoLocation_Nominatim(string userInputAddress)
+        {
+            var results = await GetNominatimSearchResults(userInputAddress, 1);
+            var parsedLocations = ParseNominatimGeoLocations(results);
+            var location = parsedLocations.FirstOrDefault();
+            if (location == null)
+            {
+                return new GeoLocationRawAPI(AddressGeoLocationEntity.Empty, null);
+            }
+
+            var mainRow = new AddressGeoLocationEntity
+            {
+                PartitionKey = location.Name(),
+                RowKey = Tools.CleanAzureTableKey(userInputAddress),
+                Longitude = location.Longitude(),
+                Latitude = location.Latitude(),
+            };
+
+            return new GeoLocationRawAPI(mainRow, null);
+        }
+
+        private static async Task<GeoLocationRawAPI> SearchAddressToGeoLocation_Nominatim(string userInputAddress)
+        {
+            var results = await GetNominatimSearchResults(userInputAddress, 5);
+            var parsedLocations = ParseNominatimGeoLocations(results);
+            if (!parsedLocations.Any())
+            {
+                return new GeoLocationRawAPI(SearchAddressGeoLocationEntity.Empty, null);
+            }
+
+            var jsonListString = Tools.ListToJson(parsedLocations).ToString(Formatting.None);
+            var mainRow = new SearchAddressGeoLocationEntity
+            {
+                PartitionKey = userInputAddress,
+                RowKey = string.Empty,
+                Results = jsonListString,
+            };
+
+            return new GeoLocationRawAPI(mainRow, null);
+        }
+
+        private static async Task<JArray> GetNominatimSearchResults(string userInputAddress, int limit)
+        {
+            if (string.IsNullOrWhiteSpace(userInputAddress)) { return new JArray(); }
+
+            var url = $"{GetNominatimBaseUrl()}/search?q={Uri.EscapeDataString(userInputAddress)}&format=jsonv2&limit={limit}";
+            try
+            {
+                using var response = await SendNominatimRequest(url);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"Nominatim request failed with status code {response.StatusCode} for URL: {url}");
+                    return new JArray();
+                }
+
+                var rawReply = await response.Content.ReadAsStringAsync();
+                return JArray.Parse(rawReply);
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"Nominatim request failed for URL: {url}\n{exception}");
+                return new JArray();
+            }
+        }
+
+        private static List<GeoLocation> ParseNominatimGeoLocations(JArray results)
+        {
+            var parsedLocations = new List<GeoLocation>();
+            foreach (var result in results.OfType<JObject>())
+            {
+                var name = result.Value<string>("display_name");
+                var latitudeParsed = double.TryParse(result.Value<string>("lat"), NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out var latitude);
+                var longitudeParsed = double.TryParse(result.Value<string>("lon"), NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out var longitude);
+
+                if (string.IsNullOrWhiteSpace(name) || !latitudeParsed || !longitudeParsed ||
+                    !AreValidCoordinates(latitude, longitude))
+                {
+                    continue;
+                }
+
+                parsedLocations.Add(new GeoLocation(name, longitude, latitude));
+            }
+
+            return parsedLocations;
+        }
+
+        private static bool AreValidCoordinates(double latitude, double longitude) =>
+            !double.IsNaN(latitude) && !double.IsInfinity(latitude) && latitude is >= -90 and <= 90 &&
+            !double.IsNaN(longitude) && !double.IsInfinity(longitude) && longitude is >= -180 and <= 180;
+
+        private static HttpClient CreateNominatimClient()
+        {
+            var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(NominatimUserAgent);
+            return client;
+        }
+
+        private static string GetNominatimBaseUrl()
+        {
+            var configuredUrl = Environment.GetEnvironmentVariable("VEDASTRO_NOMINATIM_URL");
+            return (string.IsNullOrWhiteSpace(configuredUrl) ? DefaultNominatimUrl : configuredUrl).TrimEnd('/');
+        }
+
+        private static async Task<HttpResponseMessage> SendNominatimRequest(string url)
+        {
+            await NominatimRequestGate.WaitAsync();
+            try
+            {
+                var elapsed = DateTimeOffset.UtcNow - _lastNominatimRequestUtc;
+                var delay = TimeSpan.FromSeconds(1) - elapsed;
+                if (delay > TimeSpan.Zero) { await Task.Delay(delay); }
+
+                _lastNominatimRequestUtc = DateTimeOffset.UtcNow;
+            }
+            finally
+            {
+                NominatimRequestGate.Release();
+            }
+
+            return await NominatimClient.GetAsync(url, HttpCompletionOption.ResponseContentRead);
         }
 
         /// <summary>

@@ -1554,41 +1554,6 @@ namespace VedAstro.Library
 
 
         /// <summary>
-        /// backup approximate non historic timezone calculator
-        /// </summary>
-        public static string GetTimezoneOffsetLocal(GeoLocation geoLocation, DateTime time)
-        {
-            // Calculate the timezone offset from the coordinates
-            var offset = CalculateTimeZoneOffset(geoLocation.Latitude(), geoLocation.Longitude());
-
-            // Format the offset as a string
-            var hours = (int)offset;
-            var minutes = (int)((offset - hours) * 60);
-            var offsetString = $"{(offset >= 0 ? "+" : "-")}{Math.Abs(hours):D2}:{Math.Abs(minutes):D2}";
-
-            return offsetString;
-        }
-
-        /// <summary>
-        /// backup approximate non historic timezone calculator
-        /// </summary>
-        private static double CalculateTimeZoneOffset(double latitude, double longitude)
-        {
-            // This is a simplified implementation that assumes a linear relationship
-            // between longitude and timezone offset. In reality, the relationship is
-            // more complex and depends on the country and region.
-
-            // Adjust the longitude to the range [-180, 180]
-            longitude = (longitude + 180) % 360 - 180;
-
-            // Calculate the offset in hours
-            var offset = longitude / 15;
-
-            return offset;
-        }
-
-
-        /// <summary>
         /// Given a timespan instance converts to string timezone +08:00
         /// </summary>
         public static string TimeSpanToUTCTimezoneString(TimeSpan offsetMinutes)

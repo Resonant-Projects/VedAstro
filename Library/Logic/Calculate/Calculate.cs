@@ -434,7 +434,7 @@ namespace VedAstro.Library
                 var locationProvider = new LocationManager();
 
                 //do calculation using API and cache inteligently
-                var returnVal = locationProvider.AddressToGeoLocation(address).Result;
+                var returnVal = locationProvider.AddressToGeoLocation(address).GetAwaiter().GetResult();
 
                 return returnVal;
             }
