@@ -25,8 +25,10 @@ namespace VedAstro.Library
     /// </summary>
     public class LocationManager
     {
+        private const string DefaultGeoapifyUrl = "https://api.geoapify.com";
         private const string DefaultNominatimUrl = "https://nominatim.openstreetmap.org";
         private const string NominatimUserAgent = "VedAstro-Resonant/1.0 (+https://github.com/Resonant-Projects/VedAstro)";
+        private static readonly HttpClient GeoapifyClient = new() { Timeout = TimeSpan.FromSeconds(10) };
         private static readonly HttpClient NominatimClient = CreateNominatimClient();
         private static readonly SemaphoreSlim NominatimRequestGate = new(1, 1);
         private static DateTimeOffset _lastNominatimRequestUtc = DateTimeOffset.MinValue;
@@ -59,8 +61,8 @@ namespace VedAstro.Library
 
         public enum APIProvider
         {
-            VedAstro, Nominatim, Tzdb, Azure, Google, IpData,
-            LocalFile
+            VedAstro, Nominatim, Tzdb, Azure, Google, IpData, LocalFile,
+            Geoapify
         }
 
 
@@ -181,6 +183,7 @@ namespace VedAstro.Library
             var geoLocationProviders = new Dictionary<APIProvider, Func<string, Task<GeoLocationRawAPI>>>
             {
                 {APIProvider.VedAstro, AddressToGeoLocation_VedAstro},
+                {APIProvider.Geoapify, AddressToGeoLocation_Geoapify},
                 {APIProvider.Nominatim, AddressToGeoLocation_Nominatim},
                 {APIProvider.Azure, AddressToGeoLocation_Azure},
                 {APIProvider.Google, AddressToGeoLocation_Google},
@@ -241,6 +244,7 @@ namespace VedAstro.Library
             var geoLocationProviders = new Dictionary<APIProvider, Func<string, Task<GeoLocationRawAPI>>>
             {
                 {APIProvider.VedAstro, SearchAddressToGeoLocation_VedAstro},
+                {APIProvider.Geoapify, SearchAddressToGeoLocation_Geoapify},
                 {APIProvider.Nominatim, SearchAddressToGeoLocation_Nominatim},
                 {APIProvider.Azure, SearchAddressToGeoLocation_Azure},
             };
@@ -759,6 +763,93 @@ namespace VedAstro.Library
 
         }
 
+        private static async Task<GeoLocationRawAPI> AddressToGeoLocation_Geoapify(string userInputAddress)
+        {
+            var results = await GetGeoapifySearchResults(userInputAddress, 1);
+            var parsedLocations = ParseGeoapifyGeoLocations(results);
+            var location = parsedLocations.FirstOrDefault();
+            if (location == null)
+            {
+                return new GeoLocationRawAPI(AddressGeoLocationEntity.Empty, null);
+            }
+
+            var mainRow = new AddressGeoLocationEntity
+            {
+                PartitionKey = location.Name(),
+                RowKey = Tools.CleanAzureTableKey(userInputAddress),
+                Longitude = location.Longitude(),
+                Latitude = location.Latitude(),
+            };
+
+            return new GeoLocationRawAPI(mainRow, null);
+        }
+
+        private static async Task<GeoLocationRawAPI> SearchAddressToGeoLocation_Geoapify(string userInputAddress)
+        {
+            var results = await GetGeoapifySearchResults(userInputAddress, 5);
+            var parsedLocations = ParseGeoapifyGeoLocations(results);
+            if (!parsedLocations.Any())
+            {
+                return new GeoLocationRawAPI(SearchAddressGeoLocationEntity.Empty, null);
+            }
+
+            var jsonListString = Tools.ListToJson(parsedLocations).ToString(Formatting.None);
+            var mainRow = new SearchAddressGeoLocationEntity
+            {
+                PartitionKey = userInputAddress,
+                RowKey = string.Empty,
+                Results = jsonListString,
+            };
+
+            return new GeoLocationRawAPI(mainRow, null);
+        }
+
+        private static async Task<JObject> GetGeoapifySearchResults(string userInputAddress, int limit)
+        {
+            var apiKey = Environment.GetEnvironmentVariable("GEOAPIFY_API_KEY");
+            if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(userInputAddress))
+            {
+                return new JObject();
+            }
+
+            var escapedApiKey = Uri.EscapeDataString(apiKey);
+            var url = $"{GetGeoapifyBaseUrl()}/v1/geocode/search?text={Uri.EscapeDataString(userInputAddress)}&limit={limit}&apiKey={escapedApiKey}";
+            var redactedUrl = RedactGeoapifyApiKey(url, apiKey);
+            try
+            {
+                using var response = await GeoapifyClient.GetAsync(url, HttpCompletionOption.ResponseContentRead);
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"Geoapify request failed with status code {response.StatusCode} for URL: {redactedUrl}");
+                    return new JObject();
+                }
+
+                var rawReply = await response.Content.ReadAsStringAsync();
+                return JObject.Parse(rawReply);
+            }
+            catch (Exception exception)
+            {
+                var redactedException = RedactGeoapifyApiKey(exception.ToString(), apiKey);
+                Console.WriteLine($"Geoapify request failed for URL: {redactedUrl}\n{redactedException}");
+                return new JObject();
+            }
+        }
+
+        private static string GetGeoapifyBaseUrl()
+        {
+            var configuredUrl = Environment.GetEnvironmentVariable("VEDASTRO_GEOAPIFY_URL");
+            return (string.IsNullOrWhiteSpace(configuredUrl) ? DefaultGeoapifyUrl : configuredUrl).TrimEnd('/');
+        }
+
+        private static string RedactGeoapifyApiKey(string value, string apiKey)
+        {
+            var redactedValue = value.Replace(apiKey, "REDACTED");
+            var escapedApiKey = Uri.EscapeDataString(apiKey);
+            return escapedApiKey == apiKey
+                ? redactedValue
+                : redactedValue.Replace(escapedApiKey, "REDACTED");
+        }
+
         private static async Task<GeoLocationRawAPI> AddressToGeoLocation_Nominatim(string userInputAddress)
         {
             var results = await GetNominatimSearchResults(userInputAddress, 1);
@@ -842,6 +933,29 @@ namespace VedAstro.Library
                 }
 
                 parsedLocations.Add(new GeoLocation(name, longitude, latitude));
+            }
+
+            return parsedLocations;
+        }
+
+        internal static List<GeoLocation> ParseGeoapifyGeoLocations(JObject results)
+        {
+            var parsedLocations = new List<GeoLocation>();
+            var features = results["features"] as JArray ?? new JArray();
+            foreach (var feature in features.OfType<JObject>())
+            {
+                var properties = feature["properties"] as JObject;
+                var name = properties?.Value<string>("formatted");
+                var latitude = properties?.Value<double?>("lat");
+                var longitude = properties?.Value<double?>("lon");
+
+                if (string.IsNullOrWhiteSpace(name) || !latitude.HasValue || !longitude.HasValue ||
+                    !AreValidCoordinates(latitude.Value, longitude.Value))
+                {
+                    continue;
+                }
+
+                parsedLocations.Add(new GeoLocation(name, longitude.Value, latitude.Value));
             }
 
             return parsedLocations;

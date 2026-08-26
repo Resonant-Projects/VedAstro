@@ -33,6 +33,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="LibraryTests" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <Compile Remove="calculators\**" />
 	  <EmbeddedResource Remove="calculators\**" />
 	  <None Remove="calculators\**" />
