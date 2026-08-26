@@ -32,6 +32,16 @@ public class HostedOracleRegressionTests
             Calculate.PlanetIshtaScore(PlanetName.Sun, SingaporeJ2000), 0.000001);
     }
 
+    [DataTestMethod]
+    [DataRow("00:00 01/01/2000 +00:00", 23.857073)]
+    [DataRow("00:00 01/01/2026 +00:00", 24.220304)]
+    public void LahiriAyanamsaMatchesReferenceValues(string timestamp, double expectedDegrees)
+    {
+        var time = new Time(timestamp, new GeoLocation("Greenwich", 0, 0));
+
+        Assert.AreEqual(expectedDegrees, Calculate.AyanamsaDegree(time).TotalDegrees, 0.01);
+    }
+
     [TestMethod]
     public void LagnaAndDivisionalSignsMatchHostedApi()
     {

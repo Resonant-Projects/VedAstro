@@ -15,6 +15,12 @@ public sealed class ApiKeyMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
+        if (ApiKeyAuthentication.IsExemptPath(request.Url.AbsolutePath))
+        {
+            await next(context);
+            return;
+        }
+
         var configuredKey = Environment.GetEnvironmentVariable(ApiKeyAuthentication.EnvironmentVariable);
         if (string.IsNullOrEmpty(configuredKey))
         {

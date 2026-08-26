@@ -21,4 +21,19 @@ public class ApiKeyAuthenticationTests
     [DataRow("server-secret", "")]
     public void MissingKeyIsRejected(string? configuredKey, string? suppliedKey) =>
         Assert.IsFalse(ApiKeyAuthentication.IsAuthorized(configuredKey, suppliedKey));
+
+    [DataTestMethod]
+    [DataRow("/api/version")]
+    [DataRow("/API/VERSION")]
+    [DataRow("/api/version/")]
+    public void VersionHealthcheckDoesNotRequireApiKey(string path) =>
+        Assert.IsTrue(ApiKeyAuthentication.IsExemptPath(path));
+
+    [DataTestMethod]
+    [DataRow("/api/version/extra")]
+    [DataRow("/api/versions")]
+    [DataRow("/api/calculate")]
+    [DataRow("/")]
+    public void EveryOtherPathStillRequiresApiKey(string path) =>
+        Assert.IsFalse(ApiKeyAuthentication.IsExemptPath(path));
 }

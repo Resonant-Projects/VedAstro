@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Mime;
+using System.Reflection;
 using System.Xml.Linq;
 using Azure;
 using Azure.Communication.Email;
@@ -55,6 +56,29 @@ public static class APITools
 
     public static HttpResponseData FailMessageJson(Exception exception, HttpRequestData request) =>
         MessageJson("Fail", Tools.ExceptionToJSON(exception), request);
+
+    public static string GetInnermostExceptionMessage(Exception exception)
+    {
+        while (true)
+        {
+            if (exception is AggregateException aggregateException)
+            {
+                var innerException = aggregateException.Flatten().InnerExceptions.FirstOrDefault();
+                if (innerException is null) { return aggregateException.Message; }
+
+                exception = innerException;
+                continue;
+            }
+
+            if (exception is TargetInvocationException && exception.InnerException is not null)
+            {
+                exception = exception.InnerException;
+                continue;
+            }
+
+            return exception.Message;
+        }
+    }
 
     public static HttpResponseData PassMessageJson(object? payload, HttpRequestData request) =>
         MessageJson("Pass", payload, request);
