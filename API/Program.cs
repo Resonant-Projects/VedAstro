@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Hosting;
+using API.Security;
 
 namespace API
 {
@@ -7,7 +8,8 @@ namespace API
         static async Task Main(string[] args)
         {
             var host = new HostBuilder()
-                .ConfigureFunctionsWorkerDefaults()
+                .ConfigureFunctionsWorkerDefaults(worker =>
+                    worker.UseMiddleware<ApiKeyMiddleware>())
                 .Build();
 
             host.Run();
