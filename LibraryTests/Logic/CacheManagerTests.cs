@@ -281,4 +281,41 @@ public class CacheManagerTests
             temporaryDirectory.Delete(recursive: true);
         }
     }
+
+    [TestMethod]
+    public void CacheLoadSelectsNewestChunkVariant()
+    {
+        var temporaryDirectory = Directory.CreateTempSubdirectory("vedastro-cache-variants-");
+        var originalCacheFilePath = Syntax.CacheFilePath;
+
+        try
+        {
+            Syntax.CacheFilePath = temporaryDirectory.FullName;
+            var canonicalFile = Path.Combine(temporaryDirectory.FullName, "cache_Variant_1.json");
+            var retryFile = Path.Combine(temporaryDirectory.FullName, "cache_Variant_1_retry1.json");
+            File.WriteAllText(canonicalFile, "[]");
+            File.WriteAllText(retryFile, "[]");
+
+            var getFilesMethod = typeof(CacheManager).GetMethod(
+                "getCacheFilesForLoad",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(getFilesMethod);
+
+            File.SetLastWriteTimeUtc(canonicalFile, DateTime.UtcNow.AddMinutes(-2));
+            File.SetLastWriteTimeUtc(retryFile, DateTime.UtcNow.AddMinutes(-1));
+            CollectionAssert.AreEqual(
+                new[] { retryFile },
+                (string[])getFilesMethod.Invoke(null, null)!);
+
+            File.SetLastWriteTimeUtc(canonicalFile, DateTime.UtcNow);
+            CollectionAssert.AreEqual(
+                new[] { canonicalFile },
+                (string[])getFilesMethod.Invoke(null, null)!);
+        }
+        finally
+        {
+            Syntax.CacheFilePath = originalCacheFilePath;
+            temporaryDirectory.Delete(recursive: true);
+        }
+    }
 }

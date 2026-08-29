@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
@@ -324,7 +325,7 @@ namespace VedAstro.Library
         public static void LoadCacheFromDisk0()
         {
             //get all existing cache file names
-            var foundFiles = Directory.GetFiles(Syntax.CacheFilePath, "cache*.json", SearchOption.TopDirectoryOnly);
+            var foundFiles = getCacheFilesForLoad();
 
             //load each cache file to memory
             Parallel.ForEach(foundFiles, file =>
@@ -362,7 +363,7 @@ namespace VedAstro.Library
         private static void _loadCacheFromDisk()
         {
             //get all existing cache file names
-            var foundFiles = Directory.GetFiles(Syntax.CacheFilePath, "cache*.json", SearchOption.TopDirectoryOnly);
+            var foundFiles = getCacheFilesForLoad();
 
             //load each cache file to memory
             Parallel.ForEach(foundFiles, file =>
@@ -653,6 +654,18 @@ namespace VedAstro.Library
         {
             var chunkSuffix = attempt == 0 ? count.ToString() : $"{count}_retry{attempt}";
             return $"{Syntax.CacheFileName}_{cacheFileName}_{chunkSuffix}.json";
+        }
+
+        private static string[] getCacheFilesForLoad()
+        {
+            return Directory
+                .GetFiles(Syntax.CacheFilePath, "cache*.json", SearchOption.TopDirectoryOnly)
+                .GroupBy(file => Regex.Replace(file, @"_retry\d+(?=\.json$)", string.Empty))
+                .Select(group => group
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .ThenByDescending(file => string.Equals(file, group.Key, StringComparison.Ordinal))
+                    .First())
+                .ToArray();
         }
 
         private static int getCacheFileCount()
