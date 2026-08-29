@@ -3,8 +3,6 @@ using System.Drawing;
 using Colorful;
 using Console = Colorful.Console;
 using VedAstro.Library;
-using Parquet.Schema;
-using ShellProgressBar;
 using ShellProgressBar;
 using ProgressBar = ShellProgressBar.ProgressBar;
 
@@ -56,15 +54,8 @@ namespace MLTableGenerator
                 pbar.Tick($"Reading file... {1} of {totalTicks}");
                 var inputedFile = File.OpenRead(sourceFilePath);
 
-                pbar.Tick($"Parsing Time Column... {2} of {totalTicks}");
-                var foundRawTimeList = Tools.ExtractTimeColumnFromExcel(inputedFile).Result;
-
-                pbar.Tick($"Parsing Location Column... {3} of {totalTicks}");
-                var foundGeoLocationList = Tools.ExtractLocationColumnFromExcel(inputedFile).Result;
-
-                //3 : COMBINE DATA
-                pbar.Tick($"Combining Time & Location... {4} of {totalTicks}");
-                var returnList = foundRawTimeList.Select(dateTimeOffset => new Time(dateTimeOffset, foundGeoLocationList[foundRawTimeList.IndexOf(dateTimeOffset)])).ToList();
+                pbar.Tick($"Parsing Time and Location Columns... {2} of {totalTicks}");
+                var returnList = MLTable.GetTimeListFromExcel(inputedFile).Result;
 
 
             }

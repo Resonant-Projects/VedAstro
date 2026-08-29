@@ -45,6 +45,10 @@ jobs:
           path: source
           persist-credentials: false
 
+      - name: Require .NET 8 source
+        shell: bash
+        run: grep -Eq '<TargetFramework>[[:space:]]*net8\.0[[:space:]]*</TargetFramework>' source/API/API.csproj
+
       - name: Record exact source commit
         id: revision
         working-directory: source
@@ -100,6 +104,10 @@ jobs:
           ref: ${{ steps.source.outputs.ref }}
           path: source
           persist-credentials: false
+
+      - name: Require .NET 8 source
+        shell: bash
+        run: grep -Eq '<TargetFramework>[[:space:]]*net8\.0[[:space:]]*</TargetFramework>' source/API/API.csproj
 
       - name: Record exact source commit
         id: revision

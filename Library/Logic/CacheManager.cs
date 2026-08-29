@@ -32,6 +32,12 @@ namespace VedAstro.Library
     public static class CacheManager
     {
 
+        static CacheManager()
+        {
+            // Existing disk caches use BinaryFormatter. Only load cache files created by VedAstro.
+            AppContext.SetSwitch("System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization", true);
+        }
+
         private static object sync = new Object();
 
         //keep track of cache files created
@@ -272,35 +278,37 @@ namespace VedAstro.Library
         /// </summary>
         private static void saveCacheInNewFile(string cacheFileName, int count, object tempCacheList)
         {
-            //int count = 1;
-
-            CreateFile:
-            //create a new file name based on the count to avoid collision (exp:cache_2.dat)
-            var newFileName = $"{Syntax.CacheFileName}_{cacheFileName}_{count}.dat";
-
-            try
+            const int maxAttempts = 3;
+            for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
-                //create/overwrite the cache file
-                FileStream stream = File.Create(newFileName);
+                //create a new file name based on the count to avoid collision (exp:cache_2.dat)
+                var newFileName = $"{Syntax.CacheFileName}_{cacheFileName}_{count + attempt}.dat";
+
+                try
+                {
+                    //create/overwrite the cache file
+                    using var stream = File.Create(newFileName);
 #pragma warning disable SYSLIB0011 // Type or member is obsolete
-                var formatter = new BinaryFormatter();
+                    var formatter = new BinaryFormatter();
 #pragma warning restore SYSLIB0011 // Type or member is obsolete
 
-                //save cache from memory to disk
+                    //save cache from memory to disk
 #pragma warning disable SYSLIB0011
-                formatter.Serialize(stream, tempCacheList);
+                    formatter.Serialize(stream, tempCacheList);
 #pragma warning restore SYSLIB0011
-                stream.Close();
-
+                    return;
+                }
+                //if accessing the file failed, try again with a different name
+                catch (IOException) when (attempt < maxAttempts - 1)
+                {
+                    LogManager.Error("Saving cache file failed; retrying with a new name.");
+                }
+                catch (Exception exception)
+                {
+                    LogManager.Error($"Saving cache file failed: {exception.Message}");
+                    return;
+                }
             }
-            //if accesing file failed, try again with different name (count)
-            catch (Exception)
-            {
-                LogManager.Error("Saving cache file failed!");
-                count++;
-                goto CreateFile;
-            }
-
         }
 
         private static int getCacheFileCount()
