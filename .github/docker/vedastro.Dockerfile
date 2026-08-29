@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:7.0@sha256:d32bd65cf5843f413e81f5d917057c82da99737cb1637e905a1a4bc2e7ec6c8d AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0@sha256:bb32ba3ba3ea36e38572d9d8db76fa15f7cbf722f3f886e06bca6d528bd4fba8 AS build
 WORKDIR /src
 COPY API/API.csproj API/
 COPY Library/Library.csproj Library/
@@ -7,7 +7,7 @@ COPY . .
 WORKDIR /src/API
 RUN dotnet publish API.csproj -c Release -o /app/publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated7.0@sha256:3d2656f207c34a7603d0c4434aa9ff17ce1af77d3b3a5308052557b58fe5d51c
+FROM mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated8.0@sha256:97b7c4ac794663ee19c56ca56fa458612a3d943e2c94fe76fdce00ecc64a8537
 ARG SOURCE_REVISION=unknown
 WORKDIR /home/site/wwwroot
 COPY --from=build /app/publish .

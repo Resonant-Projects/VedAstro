@@ -2,7 +2,7 @@
 #this is not DEFAULT docker file
 
 #note using isolated for perfomance & package freedom
-FROM mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated7.0 AS base
+FROM mcr.microsoft.com/azure-functions/dotnet-isolated:4-dotnet-isolated8.0 AS base
 WORKDIR /home/site/wwwroot
 EXPOSE 80
 
@@ -11,7 +11,7 @@ EXPOSE 80
 #path values are very important, cause of most failures
 #a temp project build is made in "src" then use that to make the final container
 
-FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY ["API/API.csproj", "API/"]
 RUN dotnet restore "API/API.csproj"
