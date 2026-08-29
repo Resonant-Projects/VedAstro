@@ -60,6 +60,24 @@ public class CacheManagerTests
             var cache = new ConcurrentDictionary<CacheKey, object>();
             cache.TryAdd(new CacheKey("DomainRoundTrip", "location"), location);
             cache.TryAdd(new CacheKey("DomainRoundTrip", "time"), time);
+            var house = new House(
+                HouseName.House1,
+                Angle.FromDegrees(350),
+                Angle.FromDegrees(5),
+                Angle.FromDegrees(20));
+            cache.TryAdd(new CacheKey("DomainRoundTrip", "angle"), Angle.FromDegrees(-12.5));
+            cache.TryAdd(new CacheKey("DomainRoundTrip", "house"), house);
+            cache.TryAdd(new CacheKey("DomainRoundTrip", "house-list"), new List<House> { house });
+            cache.TryAdd(
+                new CacheKey("DomainRoundTrip", "zodiac"),
+                new ZodiacSign(ZodiacName.Aries, Angle.FromDegrees(4.5)));
+            cache.TryAdd(
+                new CacheKey("DomainRoundTrip", "constellation"),
+                new Constellation(1, 2, Angle.FromDegrees(5)));
+            cache.TryAdd(new CacheKey("DomainRoundTrip", "shashtiamsa"), new Shashtiamsa(12.25));
+            cache.TryAdd(
+                new CacheKey("DomainRoundTrip", "house-strength"),
+                new HouseSubStrength(new Dictionary<HouseName, double> { [HouseName.House1] = 7.5 }, "Test"));
             cache.TryAdd(new CacheKey("DomainRoundTrip", "task"), Task.FromResult(time));
             cache.TryAdd(new CacheKey("DomainRoundTrip", "null-task"), Task.FromResult<string?>(null));
             cache.TryAdd(new CacheKey("DomainRoundTrip", "nullable-task"), Task.FromResult<int?>(42));
@@ -91,6 +109,34 @@ public class CacheManagerTests
             var restoredTime = (Time)restoredCache[new CacheKey("DomainRoundTrip", "time")];
             Assert.AreEqual(time.GetStdDateTimeOffset(), restoredTime.GetStdDateTimeOffset());
             Assert.AreEqual(location, restoredTime.GetGeoLocation());
+
+            var restoredAngle = (Angle)restoredCache[new CacheKey("DomainRoundTrip", "angle")];
+            Assert.AreEqual(-12.5, restoredAngle.TotalDegrees);
+
+            var restoredHouse = (House)restoredCache[new CacheKey("DomainRoundTrip", "house")];
+            Assert.AreEqual(house, restoredHouse);
+            var restoredHouseList =
+                (List<House>)restoredCache[new CacheKey("DomainRoundTrip", "house-list")];
+            CollectionAssert.AreEqual(new[] { house }, restoredHouseList);
+
+            var restoredZodiac = (ZodiacSign)restoredCache[new CacheKey("DomainRoundTrip", "zodiac")];
+            Assert.AreEqual(ZodiacName.Aries, restoredZodiac.GetSignName());
+            Assert.AreEqual(4.5, restoredZodiac.GetDegreesInSign().TotalDegrees);
+
+            var restoredConstellation =
+                (Constellation)restoredCache[new CacheKey("DomainRoundTrip", "constellation")];
+            Assert.AreEqual(1, restoredConstellation.GetConstellationNumber());
+            Assert.AreEqual(2, restoredConstellation.GetQuarter());
+            Assert.AreEqual(5, restoredConstellation.GetDegreesInConstellation().TotalDegrees);
+
+            var restoredShashtiamsa =
+                (Shashtiamsa)restoredCache[new CacheKey("DomainRoundTrip", "shashtiamsa")];
+            Assert.AreEqual(12.25, restoredShashtiamsa.ToDouble());
+
+            var restoredStrength =
+                (HouseSubStrength)restoredCache[new CacheKey("DomainRoundTrip", "house-strength")];
+            Assert.AreEqual("Test", restoredStrength.Name);
+            Assert.AreEqual(7.5, restoredStrength.Power[HouseName.House1]);
 
             var restoredTask = (Task<Time>)restoredCache[new CacheKey("DomainRoundTrip", "task")];
             Assert.AreEqual(time.GetStdDateTimeOffset(), (await restoredTask).GetStdDateTimeOffset());
@@ -133,6 +179,9 @@ public class CacheManagerTests
                 BindingFlags.NonPublic | BindingFlags.Static);
 
             Assert.IsNotNull(deserializeMethod);
+            Assert.IsNotNull(
+                Type.GetType("System.IO.FileInfo, System.Private.CoreLib", throwOnError: false),
+                "Test precondition: the rejected type must resolve so the allowlist is exercised.");
             var restoredCache = (ConcurrentDictionary<CacheKey, object>)deserializeMethod.Invoke(
                 null,
                 new object[] { cacheFile })!;
@@ -145,32 +194,32 @@ public class CacheManagerTests
     }
 
     [TestMethod]
-    public void SaveCacheToDiskRejectsDomainTypesWithoutExplicitConverters()
+    public void LoadCacheFromDisk0SkipsMalformedFiles()
     {
-        var temporaryDirectory = Directory.CreateTempSubdirectory("vedastro-cache-unsupported-");
-        var originalCacheFileName = Syntax.CacheFileName;
+        var temporaryDirectory = Directory.CreateTempSubdirectory("vedastro-cache-malformed-");
+        var originalCacheFilePath = Syntax.CacheFilePath;
 
         try
         {
-            Syntax.CacheFileName = Path.Combine(temporaryDirectory.FullName, "cache");
-            var cache = new ConcurrentDictionary<CacheKey, object>();
-            cache.TryAdd(new CacheKey("UnsupportedDomain", "house"), new House());
+            Syntax.CacheFilePath = temporaryDirectory.FullName;
+            File.WriteAllText(Path.Combine(temporaryDirectory.FullName, "cache_Malformed_1.json"), "{");
 
-            var saveMethod = typeof(CacheManager).GetMethod(
-                "saveCacheInNewFile",
-                BindingFlags.NonPublic | BindingFlags.Static);
-
-            Assert.IsNotNull(saveMethod);
-            saveMethod.Invoke(null, new object[] { "UnsupportedDomain", 1, cache });
-
-            var cacheFile = Directory.GetFiles(temporaryDirectory.FullName).Single();
-            Assert.AreEqual("[]", File.ReadAllText(cacheFile));
+            CacheManager.LoadCacheFromDisk0();
         }
         finally
         {
-            Syntax.CacheFileName = originalCacheFileName;
+            Syntax.CacheFilePath = originalCacheFilePath;
             temporaryDirectory.Delete(recursive: true);
         }
+    }
+
+    [TestMethod]
+    public void CacheKeyUsesDeterministicStringHashes()
+    {
+        var expected = Tools.GetStringHashCode("StableFunction") +
+                       ((17 * 23) + Tools.GetStringHashCode("StableArgument"));
+
+        Assert.AreEqual(expected, new CacheKey("StableFunction", "StableArgument").GetHashCode());
     }
 
     [TestMethod]
