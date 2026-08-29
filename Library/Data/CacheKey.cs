@@ -14,6 +14,8 @@ namespace VedAstro.Library
         //public object[] Args;
         private int _ultimateHash;
 
+        internal int UltimateHash => _ultimateHash;
+
         //CTOR
         public CacheKey(string function, params object[] args)
         {
@@ -21,11 +23,18 @@ namespace VedAstro.Library
             //Args = args;
 
             //get hashes of all values
-            var functionNameHash = function.GetHashCode();
+            var functionNameHash = Tools.GetStringHashCode(function);
             var allArgumentsHash = GetHashCodeForArray(args);
 
             //combine them together
             _ultimateHash = functionNameHash + allArgumentsHash;
+        }
+
+        internal static CacheKey FromHash(string function, int ultimateHash)
+        {
+            var cacheKey = new CacheKey(function);
+            cacheKey._ultimateHash = ultimateHash;
+            return cacheKey;
         }
 
 
@@ -89,7 +98,7 @@ namespace VedAstro.Library
                     // get hash code for all items in array
                     foreach (var item in array)
                     {
-                        hash = hash * 23 + ((item != null) ? item.GetHashCode() : 0);
+                        hash = hash * 23 + GetStableHashCode(item);
                     }
 
                     return hash;
@@ -98,6 +107,35 @@ namespace VedAstro.Library
 
             // if null, hash code is zero
             return 0;
+        }
+
+        private static int GetStableHashCode(object value)
+        {
+            if (value == null)
+            {
+                return 0;
+            }
+
+            if (value is string text)
+            {
+                return Tools.GetStringHashCode(text);
+            }
+
+            if (value is Array array)
+            {
+                unchecked
+                {
+                    var hash = 17;
+                    foreach (var item in array)
+                    {
+                        hash = (hash * 23) + GetStableHashCode(item);
+                    }
+
+                    return hash;
+                }
+            }
+
+            return value.GetHashCode();
         }
     }
 }

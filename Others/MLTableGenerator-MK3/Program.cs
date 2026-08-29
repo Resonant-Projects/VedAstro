@@ -3,8 +3,6 @@ using System.Drawing;
 using Colorful;
 using Console = Colorful.Console;
 using VedAstro.Library;
-using Parquet.Schema;
-using ShellProgressBar;
 using ShellProgressBar;
 using ProgressBar = ShellProgressBar.ProgressBar;
 
@@ -13,7 +11,7 @@ namespace MLTableGenerator
     internal class Program
     {
         [STAThread]
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
             //Console.WriteWithGradient("Hello, World!", Color.Red, Color.Blue, 14);
             //Console.WriteStyled("Hello, World!", new StyleSheet(Color.Yellow));
@@ -43,7 +41,7 @@ namespace MLTableGenerator
             Console.WriteLine("\nSTEP 2:", Color.Yellow);
             Console.WriteLine("Processing file...\n");
 
-            int totalTicks = 10;
+            int totalTicks = 2;
             var options = new ProgressBarOptions
             {
                 ProgressCharacter = '─',
@@ -54,17 +52,10 @@ namespace MLTableGenerator
 
                 //get file as binary
                 pbar.Tick($"Reading file... {1} of {totalTicks}");
-                var inputedFile = File.OpenRead(sourceFilePath);
+                using var inputedFile = File.OpenRead(sourceFilePath);
 
-                pbar.Tick($"Parsing Time Column... {2} of {totalTicks}");
-                var foundRawTimeList = Tools.ExtractTimeColumnFromExcel(inputedFile).Result;
-
-                pbar.Tick($"Parsing Location Column... {3} of {totalTicks}");
-                var foundGeoLocationList = Tools.ExtractLocationColumnFromExcel(inputedFile).Result;
-
-                //3 : COMBINE DATA
-                pbar.Tick($"Combining Time & Location... {4} of {totalTicks}");
-                var returnList = foundRawTimeList.Select(dateTimeOffset => new Time(dateTimeOffset, foundGeoLocationList[foundRawTimeList.IndexOf(dateTimeOffset)])).ToList();
+                pbar.Tick($"Parsing Time and Location Columns... {2} of {totalTicks}");
+                var returnList = await MLTable.GetTimeListFromExcel(inputedFile);
 
 
             }

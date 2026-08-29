@@ -11,7 +11,7 @@ on:
       source_ref:
         description: Fork branch, tag, or commit to build
         required: true
-        default: 92561401c0728bdc925706fa896fbb4b5342b1d7
+        default: 2e0216764680898754decd21acaf822d43f7d39a
         type: string
 
 permissions:
@@ -23,7 +23,7 @@ concurrency:
 
 env:
   IMAGE_NAME: ghcr.io/resonant-projects/vedastro
-  STABLE_SOURCE_REF: 92561401c0728bdc925706fa896fbb4b5342b1d7
+  STABLE_SOURCE_REF: 2e0216764680898754decd21acaf822d43f7d39a
 
 jobs:
   validate:
@@ -44,6 +44,18 @@ jobs:
           ref: ${{ env.STABLE_SOURCE_REF }}
           path: source
           persist-credentials: false
+
+      - name: Require .NET 8 source
+        shell: bash
+        run: |
+          evaluated_framework="$(docker run --rm \
+            -v "$GITHUB_WORKSPACE/source:/src:ro" \
+            -w /src \
+            -e DOTNET_NOLOGO=1 \
+            -e DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+            mcr.microsoft.com/dotnet/sdk:8.0@sha256:bb32ba3ba3ea36e38572d9d8db76fa15f7cbf722f3f886e06bca6d528bd4fba8 \
+            dotnet msbuild API/API.csproj -nologo -getProperty:TargetFramework)"
+          test "$evaluated_framework" = net8.0
 
       - name: Record exact source commit
         id: revision
@@ -100,6 +112,18 @@ jobs:
           ref: ${{ steps.source.outputs.ref }}
           path: source
           persist-credentials: false
+
+      - name: Require .NET 8 source
+        shell: bash
+        run: |
+          evaluated_framework="$(docker run --rm \
+            -v "$GITHUB_WORKSPACE/source:/src:ro" \
+            -w /src \
+            -e DOTNET_NOLOGO=1 \
+            -e DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
+            mcr.microsoft.com/dotnet/sdk:8.0@sha256:bb32ba3ba3ea36e38572d9d8db76fa15f7cbf722f3f886e06bca6d528bd4fba8 \
+            dotnet msbuild API/API.csproj -nologo -getProperty:TargetFramework)"
+          test "$evaluated_framework" = net8.0
 
       - name: Record exact source commit
         id: revision

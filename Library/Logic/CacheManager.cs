@@ -6,12 +6,12 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization.Formatters.Binary;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
-//using Xfrogcn.BinaryFormatter;
-#pragma warning disable SYSLIB0011
 
 
 //IF I LIVED IN A WORLD WHERE JESUS DID NOT WALK
@@ -31,6 +31,215 @@ namespace VedAstro.Library
     /// </summary>
     public static class CacheManager
     {
+
+        private static readonly JsonSerializerOptions CacheSerializerOptions = new()
+        {
+            IncludeFields = true,
+            Converters =
+            {
+                new TimeCacheJsonConverter(),
+                new GeoLocationCacheJsonConverter(),
+                new AngleCacheJsonConverter(),
+                new HouseCacheJsonConverter(),
+                new ZodiacSignCacheJsonConverter(),
+                new ConstellationCacheJsonConverter(),
+                new ShashtiamsaCacheJsonConverter(),
+                new HouseSubStrengthCacheJsonConverter()
+            }
+        };
+
+        private static readonly HashSet<Type> AllowedSystemGenericTypes = new()
+        {
+            typeof(List<>),
+            typeof(Dictionary<,>),
+            typeof(ConcurrentDictionary<,>),
+            typeof(Nullable<>),
+            typeof(KeyValuePair<,>),
+            typeof(ValueTuple<>),
+            typeof(ValueTuple<,>),
+            typeof(ValueTuple<,,>),
+            typeof(ValueTuple<,,,>),
+            typeof(ValueTuple<,,,,>),
+            typeof(ValueTuple<,,,,,>),
+            typeof(ValueTuple<,,,,,,>),
+            typeof(ValueTuple<,,,,,,,>)
+        };
+
+        private static readonly HashSet<Type> AllowedLibraryCacheTypes = new()
+        {
+            typeof(Time),
+            typeof(GeoLocation),
+            typeof(Angle),
+            typeof(House),
+            typeof(ZodiacSign),
+            typeof(Constellation),
+            typeof(Shashtiamsa),
+            typeof(HouseSubStrength)
+        };
+
+        private sealed record CacheFileEntry(
+            string Function,
+            int Hash,
+            string ValueType,
+            JsonElement Value,
+            string? TaskResultType = null);
+
+        private sealed record TimeCacheValue(DateTimeOffset StdTime, GeoLocation Location);
+        private sealed record GeoLocationCacheValue(string Name, double Longitude, double Latitude);
+        private sealed record AngleCacheValue(long TotalSeconds);
+        private sealed record HouseCacheValue(
+            HouseName Name,
+            Angle BeginLongitude,
+            Angle MiddleLongitude,
+            Angle EndLongitude);
+        private sealed record ZodiacSignCacheValue(ZodiacName Name, Angle DegreesInSign);
+        private sealed record ConstellationCacheValue(int Number, int Quarter, Angle Degrees);
+        private sealed record ShashtiamsaCacheValue(double Value);
+        private sealed record HouseSubStrengthCacheValue(
+            string Name,
+            Dictionary<HouseName, double> Power);
+
+        private sealed class TimeCacheJsonConverter : JsonConverter<Time>
+        {
+            public override Time Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var value = JsonSerializer.Deserialize<TimeCacheValue>(ref reader, options)
+                            ?? throw new JsonException("Invalid cached Time value.");
+                return new Time(value.StdTime, value.Location);
+            }
+
+            public override void Write(Utf8JsonWriter writer, Time value, JsonSerializerOptions options) =>
+                JsonSerializer.Serialize(
+                    writer,
+                    new TimeCacheValue(value.GetStdDateTimeOffset(), value.GetGeoLocation()),
+                    options);
+        }
+
+        private sealed class GeoLocationCacheJsonConverter : JsonConverter<GeoLocation>
+        {
+            public override GeoLocation Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var value = JsonSerializer.Deserialize<GeoLocationCacheValue>(ref reader, options)
+                            ?? throw new JsonException("Invalid cached GeoLocation value.");
+                return new GeoLocation(value.Name, value.Longitude, value.Latitude);
+            }
+
+            public override void Write(Utf8JsonWriter writer, GeoLocation value, JsonSerializerOptions options) =>
+                JsonSerializer.Serialize(
+                    writer,
+                    new GeoLocationCacheValue(value.Name(), value.Longitude(), value.Latitude()),
+                    options);
+        }
+
+        private sealed class AngleCacheJsonConverter : JsonConverter<Angle>
+        {
+            public override Angle Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var value = JsonSerializer.Deserialize<AngleCacheValue>(ref reader, options)
+                            ?? throw new JsonException("Invalid cached Angle value.");
+                return new Angle(seconds: value.TotalSeconds);
+            }
+
+            public override void Write(Utf8JsonWriter writer, Angle value, JsonSerializerOptions options)
+            {
+                var totalSeconds = (value.Degrees * 3600) + (value.Minutes * 60) + value.Seconds;
+                JsonSerializer.Serialize(writer, new AngleCacheValue(totalSeconds), options);
+            }
+        }
+
+        private sealed class HouseCacheJsonConverter : JsonConverter<House>
+        {
+            public override House Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var value = JsonSerializer.Deserialize<HouseCacheValue>(ref reader, options)
+                            ?? throw new JsonException("Invalid cached House value.");
+                return new House(
+                    value.Name,
+                    value.BeginLongitude,
+                    value.MiddleLongitude,
+                    value.EndLongitude);
+            }
+
+            public override void Write(Utf8JsonWriter writer, House value, JsonSerializerOptions options) =>
+                JsonSerializer.Serialize(
+                    writer,
+                    new HouseCacheValue(
+                        value.GetHouseName(),
+                        value.GetBeginLongitude(),
+                        value.GetMiddleLongitude(),
+                        value.GetEndLongitude()),
+                    options);
+        }
+
+        private sealed class ZodiacSignCacheJsonConverter : JsonConverter<ZodiacSign>
+        {
+            public override ZodiacSign Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var value = JsonSerializer.Deserialize<ZodiacSignCacheValue>(ref reader, options)
+                            ?? throw new JsonException("Invalid cached ZodiacSign value.");
+                return new ZodiacSign(value.Name, value.DegreesInSign);
+            }
+
+            public override void Write(Utf8JsonWriter writer, ZodiacSign value, JsonSerializerOptions options) =>
+                JsonSerializer.Serialize(
+                    writer,
+                    new ZodiacSignCacheValue(value.GetSignName(), value.GetDegreesInSign()),
+                    options);
+        }
+
+        private sealed class ConstellationCacheJsonConverter : JsonConverter<Constellation>
+        {
+            public override Constellation Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var value = JsonSerializer.Deserialize<ConstellationCacheValue>(ref reader, options)
+                            ?? throw new JsonException("Invalid cached Constellation value.");
+                return new Constellation(value.Number, value.Quarter, value.Degrees);
+            }
+
+            public override void Write(Utf8JsonWriter writer, Constellation value, JsonSerializerOptions options) =>
+                JsonSerializer.Serialize(
+                    writer,
+                    new ConstellationCacheValue(
+                        value.GetConstellationNumber(),
+                        value.GetQuarter(),
+                        value.GetDegreesInConstellation()),
+                    options);
+        }
+
+        private sealed class ShashtiamsaCacheJsonConverter : JsonConverter<Shashtiamsa>
+        {
+            public override Shashtiamsa Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var value = JsonSerializer.Deserialize<ShashtiamsaCacheValue>(ref reader, options)
+                            ?? throw new JsonException("Invalid cached Shashtiamsa value.");
+                return new Shashtiamsa(value.Value);
+            }
+
+            public override void Write(Utf8JsonWriter writer, Shashtiamsa value, JsonSerializerOptions options) =>
+                JsonSerializer.Serialize(writer, new ShashtiamsaCacheValue(value.ToDouble()), options);
+        }
+
+        private sealed class HouseSubStrengthCacheJsonConverter : JsonConverter<HouseSubStrength>
+        {
+            public override HouseSubStrength Read(
+                ref Utf8JsonReader reader,
+                Type typeToConvert,
+                JsonSerializerOptions options)
+            {
+                var value = JsonSerializer.Deserialize<HouseSubStrengthCacheValue>(ref reader, options)
+                            ?? throw new JsonException("Invalid cached HouseSubStrength value.");
+                return new HouseSubStrength(value.Power, value.Name);
+            }
+
+            public override void Write(
+                Utf8JsonWriter writer,
+                HouseSubStrength value,
+                JsonSerializerOptions options) =>
+                JsonSerializer.Serialize(
+                    writer,
+                    new HouseSubStrengthCacheValue(value.Name, value.Power),
+                    options);
+        }
 
         private static object sync = new Object();
 
@@ -116,19 +325,15 @@ namespace VedAstro.Library
         public static void LoadCacheFromDisk0()
         {
             //get all existing cache file names
-            var foundFiles = Directory.GetFiles(Syntax.CacheFilePath, "cache*", SearchOption.TopDirectoryOnly);
+            var foundFileGroups = getCacheFileGroupsForLoad();
 
             //load each cache file to memory
-            Parallel.ForEach(foundFiles, file =>
+            Parallel.ForEach(foundFileGroups, files =>
             {
-                //get the cache file from disk
-                using var stream = File.OpenRead(file);
-                var formatter = new BinaryFormatter();
-
-                //parse the cache
-#pragma warning disable SYSLIB0011
-                var cacheData = formatter.Deserialize(stream) as ConcurrentDictionary<CacheKey, object>;
-#pragma warning restore SYSLIB0011
+                if (!tryDeserializeCacheVariants(files, out var file, out var cacheData))
+                {
+                    return;
+                }
 
                 //get name of the method the cache belongs to
                 var rawName = file.Split('_');
@@ -152,37 +357,19 @@ namespace VedAstro.Library
         private static void _loadCacheFromDisk()
         {
             //get all existing cache file names
-            var foundFiles = Directory.GetFiles(Syntax.CacheFilePath, "cache*", SearchOption.TopDirectoryOnly);
+            var foundFileGroups = getCacheFileGroupsForLoad();
 
             //load each cache file to memory
-            Parallel.ForEach(foundFiles, file =>
+            Parallel.ForEach(foundFileGroups, files =>
             {
-                //get the cache file from disk
-                using var stream = File.OpenRead(file);
-#pragma warning disable SYSLIB0011 // Type or member is obsolete
-                var formatter = new BinaryFormatter();
-#pragma warning restore SYSLIB0011 // Type or member is obsolete
+                if (!tryDeserializeCacheVariants(files, out var file, out var cacheData))
+                {
+                    return;
+                }
 
                 //get name of the method the cache belongs to
                 var rawName = file.Split('_');
                 var methodName = rawName[1];
-
-                ConcurrentDictionary<CacheKey, object> cacheData;
-
-                //parse the cache
-                try
-                {
-#pragma warning disable SYSLIB0011
-                    cacheData = formatter.Deserialize(stream) as ConcurrentDictionary<CacheKey, object>;
-#pragma warning restore SYSLIB0011
-
-                }
-                //if fail just skip this cache file
-                catch (Exception)
-                {
-                    LogManager.Error($"Loading cache failed : {rawName}");
-                    return;
-                }
 
 
                 //try load whole cache into memory
@@ -272,35 +459,221 @@ namespace VedAstro.Library
         /// </summary>
         private static void saveCacheInNewFile(string cacheFileName, int count, object tempCacheList)
         {
-            //int count = 1;
-
-            CreateFile:
-            //create a new file name based on the count to avoid collision (exp:cache_2.dat)
-            var newFileName = $"{Syntax.CacheFileName}_{cacheFileName}_{count}.dat";
-
-            try
+            const int maxAttempts = 3;
+            for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
-                //create/overwrite the cache file
-                FileStream stream = File.Create(newFileName);
-#pragma warning disable SYSLIB0011 // Type or member is obsolete
-                var formatter = new BinaryFormatter();
-#pragma warning restore SYSLIB0011 // Type or member is obsolete
+                var newFileName = buildCacheFileName(cacheFileName, count, attempt);
 
-                //save cache from memory to disk
-#pragma warning disable SYSLIB0011
-                formatter.Serialize(stream, tempCacheList);
-#pragma warning restore SYSLIB0011
-                stream.Close();
+                try
+                {
+                    var cacheData = (ConcurrentDictionary<CacheKey, object>)tempCacheList;
+                    var entries = new List<CacheFileEntry>();
+                    var skippedEntryCount = 0;
+                    foreach (var cacheItem in cacheData)
+                    {
+                        if (cacheItem.Value == null)
+                        {
+                            skippedEntryCount++;
+                            continue;
+                        }
 
+                        var valueType = cacheItem.Value.GetType();
+                        Type? taskResultType = null;
+                        object? valueToSerialize = cacheItem.Value;
+
+                        if (cacheItem.Value is Task task)
+                        {
+                            taskResultType = getTaskResultType(valueType);
+                            if (taskResultType == null || !task.IsCompletedSuccessfully)
+                            {
+                                skippedEntryCount++;
+                                continue;
+                            }
+
+                            valueToSerialize = typeof(Task<>)
+                                .MakeGenericType(taskResultType)
+                                .GetProperty(nameof(Task<object>.Result))!
+                                .GetValue(task);
+                            valueType = valueToSerialize?.GetType() ?? taskResultType;
+                        }
+
+                        if (!isAllowedCacheType(valueType))
+                        {
+                            skippedEntryCount++;
+                            continue;
+                        }
+
+                        JsonElement serializedValue;
+                        try
+                        {
+                            serializedValue = JsonSerializer.SerializeToElement(
+                                valueToSerialize,
+                                valueType,
+                                CacheSerializerOptions);
+                        }
+                        catch (Exception)
+                        {
+                            skippedEntryCount++;
+                            continue;
+                        }
+
+                        entries.Add(new CacheFileEntry(
+                            cacheItem.Key.Function,
+                            cacheItem.Key.UltimateHash,
+                            valueType.AssemblyQualifiedName!,
+                            serializedValue,
+                            taskResultType?.AssemblyQualifiedName));
+                    }
+
+                    if (skippedEntryCount > 0)
+                    {
+                        LogManager.Error($"Skipped {skippedEntryCount} unsupported cache entries in {cacheFileName}.");
+                    }
+
+                    var serializedCache = JsonSerializer.Serialize(entries, CacheSerializerOptions);
+                    File.WriteAllText(newFileName, serializedCache);
+                    return;
+                }
+                //if accessing the file failed, try again with a different name
+                catch (IOException) when (attempt < maxAttempts - 1)
+                {
+                    LogManager.Error("Saving cache file failed; retrying with a new name.");
+                }
+                catch (Exception exception)
+                {
+                    LogManager.Error($"Saving cache file failed: {exception.Message}");
+                    return;
+                }
             }
-            //if accesing file failed, try again with different name (count)
-            catch (Exception)
+        }
+
+        private static ConcurrentDictionary<CacheKey, object> deserializeCache(string file)
+        {
+            var serializedCache = File.ReadAllText(file);
+            var entries = JsonSerializer.Deserialize<List<CacheFileEntry>>(
+                serializedCache,
+                CacheSerializerOptions) ?? new List<CacheFileEntry>();
+            var cacheData = new ConcurrentDictionary<CacheKey, object>();
+
+            foreach (var entry in entries)
             {
-                LogManager.Error("Saving cache file failed!");
-                count++;
-                goto CreateFile;
+                var valueType = Type.GetType(entry.ValueType, throwOnError: false);
+                if (valueType == null || !isAllowedCacheType(valueType))
+                {
+                    LogManager.Error($"Skipping unsupported cache type: {entry.ValueType}");
+                    continue;
+                }
+
+                var value = entry.Value.Deserialize(valueType, CacheSerializerOptions);
+                if (value == null && entry.TaskResultType == null)
+                {
+                    continue;
+                }
+
+                if (entry.TaskResultType != null)
+                {
+                    var taskResultType = Type.GetType(entry.TaskResultType, throwOnError: false);
+                    var nullableResultType = taskResultType == null
+                        ? null
+                        : Nullable.GetUnderlyingType(taskResultType);
+                    if (taskResultType == null ||
+                        (value != null &&
+                         !taskResultType.IsAssignableFrom(valueType) &&
+                         nullableResultType != valueType) ||
+                        (value == null && taskResultType.IsValueType && Nullable.GetUnderlyingType(taskResultType) == null))
+                    {
+                        LogManager.Error($"Skipping unsupported cached task type: {entry.TaskResultType}");
+                        continue;
+                    }
+
+                    value = typeof(Task)
+                        .GetMethod(nameof(Task.FromResult))!
+                        .MakeGenericMethod(taskResultType)
+                        .Invoke(null, new[] { value })!;
+                }
+
+                cacheData.TryAdd(CacheKey.FromHash(entry.Function, entry.Hash), value);
             }
 
+            return cacheData;
+        }
+
+        private static bool isAllowedCacheType(Type type)
+        {
+            if (AllowedLibraryCacheTypes.Contains(type) || type.IsEnum || type.IsPrimitive)
+            {
+                return true;
+            }
+
+            if (type == typeof(string) || type == typeof(decimal) || type == typeof(DateTime) ||
+                type == typeof(DateTimeOffset) || type == typeof(TimeSpan) || type == typeof(Guid))
+            {
+                return true;
+            }
+
+            if (type.IsArray)
+            {
+                return type.GetArrayRank() == 1 && isAllowedCacheType(type.GetElementType()!);
+            }
+
+            return type.IsGenericType &&
+                   AllowedSystemGenericTypes.Contains(type.GetGenericTypeDefinition()) &&
+                   type.GetGenericArguments().All(isAllowedCacheType);
+        }
+
+        private static Type? getTaskResultType(Type type)
+        {
+            for (var currentType = type; currentType != null; currentType = currentType.BaseType)
+            {
+                if (currentType.IsGenericType && currentType.GetGenericTypeDefinition() == typeof(Task<>))
+                {
+                    return currentType.GetGenericArguments()[0];
+                }
+            }
+
+            return null;
+        }
+
+        private static string buildCacheFileName(string cacheFileName, int count, int attempt)
+        {
+            var chunkSuffix = attempt == 0 ? count.ToString() : $"{count}_retry{attempt}";
+            return $"{Syntax.CacheFileName}_{cacheFileName}_{chunkSuffix}.json";
+        }
+
+        private static string[][] getCacheFileGroupsForLoad()
+        {
+            return Directory
+                .GetFiles(Syntax.CacheFilePath, "cache*.json", SearchOption.TopDirectoryOnly)
+                .GroupBy(file => Regex.Replace(file, @"_retry\d+(?=\.json$)", string.Empty))
+                .Select(group => group
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .ThenByDescending(file => string.Equals(file, group.Key, StringComparison.Ordinal))
+                    .ToArray())
+                .ToArray();
+        }
+
+        private static bool tryDeserializeCacheVariants(
+            IEnumerable<string> files,
+            out string selectedFile,
+            out ConcurrentDictionary<CacheKey, object> cacheData)
+        {
+            foreach (var file in files)
+            {
+                try
+                {
+                    cacheData = deserializeCache(file);
+                    selectedFile = file;
+                    return true;
+                }
+                catch (Exception)
+                {
+                    LogManager.Error($"Loading cache failed : {file}");
+                }
+            }
+
+            selectedFile = string.Empty;
+            cacheData = new ConcurrentDictionary<CacheKey, object>();
+            return false;
         }
 
         private static int getCacheFileCount()
