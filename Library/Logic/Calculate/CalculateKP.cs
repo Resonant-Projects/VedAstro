@@ -266,8 +266,7 @@ namespace VedAstro.Library
             //get location at place of time
             var location = time.GetGeoLocation();
 
-            using SwissEph swissEphHorary = new SwissEph();
-            swissEphHorary.swe_set_ephe_path(null);
+            using SwissEph swissEphHorary = EphemerisFactory.New();
 
             //var jul_day_ut = Calculate.TimeToJulianDay(time); REMOVE LATER
             //Console.WriteLine("Julian Day for 18 June 1970 10:30a {0}", jul_day_ut);
@@ -329,7 +328,7 @@ namespace VedAstro.Library
 
         public static double GetNutation(Time time)
         {
-            using SwissEph swissEph = new SwissEph();
+            using SwissEph swissEph = EphemerisFactory.New();
             double[] x = new double[6];
             string serr = "";
 
@@ -360,7 +359,7 @@ namespace VedAstro.Library
             //Convert DOB to Julian Day
             var jul_day_UT = TimeToJulianDay(time);
 
-            using SwissEph swissEph = new SwissEph();
+            using SwissEph swissEph = EphemerisFactory.New();
             double[] cusps = new double[13];
             double[] ascmc = new double[10];
 
@@ -398,7 +397,7 @@ namespace VedAstro.Library
             //get location at place of time
             var location = time.GetGeoLocation();
 
-            using SwissEph swissEph = new SwissEph();
+            using SwissEph swissEph = EphemerisFactory.New();
 
             double[] cusps = new double[13];
 
@@ -438,7 +437,7 @@ namespace VedAstro.Library
         {
             //get location at place of time
             var location = time.GetGeoLocation();
-            using SwissEph swissEph = new SwissEph();
+            using SwissEph swissEph = EphemerisFactory.New();
 
             double[] cusps = new double[13];
 
@@ -1244,7 +1243,7 @@ namespace VedAstro.Library
                 //get location at place of time
                 var location = time.GetGeoLocation();
 
-                using SwissEph swissEph = new SwissEph();
+                using SwissEph swissEph = EphemerisFactory.New();
 
                 double[] cusps = new double[13];
 

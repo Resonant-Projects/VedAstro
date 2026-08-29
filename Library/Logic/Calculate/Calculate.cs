@@ -3368,7 +3368,7 @@ namespace VedAstro.Library
             //Converts LMT to UTC (GMT)
             DateTimeOffset utcDateTime = lmtDateTime.ToUniversalTime();
 
-            SwissEph swissEph = new SwissEph();
+            SwissEph swissEph = EphemerisFactory.New();
 
             double jul_day_UT;
             jul_day_UT = swissEph.swe_julday(utcDateTime.Year, utcDateTime.Month, utcDateTime.Day,
@@ -3575,7 +3575,7 @@ namespace VedAstro.Library
                 double localMeanTimeInJulian_UT;
 
                 //initialize ephemeris
-                SwissEph ephemeris = new SwissEph();
+                SwissEph ephemeris = EphemerisFactory.New();
 
                 //get lmt in julian day in Universal Time (UT)
                 localMeanTimeInJulian_UT = ephemeris.swe_julday(year, month, day, hour, gregflag);//time to Julian Day
@@ -4359,7 +4359,7 @@ namespace VedAstro.Library
                 string errorString = null;
 
                 //initialize ephemeris
-                SwissEph ephemeris = new SwissEph();
+                SwissEph ephemeris = EphemerisFactory.New();
 
                 //convert lmt to local apparent time (LAT)
                 ephemeris.swe_lmt_to_lat(localMeanTimeInJulian_UT, longitude, out localApparentTimeInJulian, ref errorString);
@@ -5827,7 +5827,7 @@ namespace VedAstro.Library
         /// Gets nutation from Swiss Ephemeris
         public static double Nutation(Time time)
         {
-            SwissEph swissEph = new SwissEph();
+            SwissEph swissEph = EphemerisFactory.New();
             double[] x = new double[6];
             string serr = "";
 
@@ -5912,7 +5912,7 @@ namespace VedAstro.Library
                 int iflag = SwissEph.SEFLG_SIDEREAL;
                 //int iflag = SwissEph.SEFLG_NONUT;
                 double jul_day_ET;
-                SwissEph ephemeris = new SwissEph();
+                SwissEph ephemeris = EphemerisFactory.New();
 
                 // Convert DOB to ET
                 jul_day_ET = TimeToEphemerisTime(time);
@@ -5959,7 +5959,7 @@ namespace VedAstro.Library
                 int iflag = SwissEph.SEFLG_SWIEPH;  //+ SwissEph.SEFLG_SPEED;
                 double[] results = new double[6];
                 string err_msg = "";
-                SwissEph ephemeris = new SwissEph();
+                SwissEph ephemeris = EphemerisFactory.New();
 
                 // Convert DOB to ET
                 double jul_day_ET = TimeToEphemerisTime(time);
@@ -6033,7 +6033,7 @@ namespace VedAstro.Library
                 double[] results = new double[6];
                 string err_msg = "";
                 double jul_day_ET;
-                SwissEph ephemeris = new SwissEph();
+                SwissEph ephemeris = EphemerisFactory.New();
 
                 // Convert DOB to ET
                 jul_day_ET = TimeToEphemerisTime(time);
@@ -6081,7 +6081,7 @@ namespace VedAstro.Library
                 int iflag = SwissEph.SEFLG_SWIEPH;  //+ SwissEph.SEFLG_SPEED;
                 double[] results = new double[10];
                 string err_msg = "";
-                SwissEph ephemeris = new SwissEph();
+                SwissEph ephemeris = EphemerisFactory.New();
 
                 // Convert DOB to ET
                 var jul_day_ET = Calculate.TimeToJulianDay(time);
@@ -6122,7 +6122,7 @@ namespace VedAstro.Library
                 double[] results = new double[10];
                 string err_msg = "";
                 double jul_day_ET;
-                SwissEph ephemeris = new SwissEph();
+                SwissEph ephemeris = EphemerisFactory.New();
 
                 // Convert DOB to ET
                 jul_day_ET = Calculate.TimeToJulianDay(time);
@@ -6167,7 +6167,7 @@ namespace VedAstro.Library
                 double[] results = new double[6];
                 string err_msg = "";
                 double jul_day_ET;
-                SwissEph ephemeris = new SwissEph();
+                SwissEph ephemeris = EphemerisFactory.New();
 
                 // Convert DOB to ET
                 jul_day_ET = TimeToEphemerisTime(time);
@@ -6216,7 +6216,7 @@ namespace VedAstro.Library
                 double[] results = new double[6];
                 string err_msg = "";
                 double jul_day_ET;
-                SwissEph ephemeris = new SwissEph();
+                SwissEph ephemeris = EphemerisFactory.New();
 
                 // Convert DOB to ET
                 jul_day_ET = TimeToEphemerisTime(time);
@@ -6282,7 +6282,7 @@ namespace VedAstro.Library
             double[] results = new double[6];
             string err_msg = "";
             double jul_day_ET;
-            SwissEph ephemeris = new SwissEph();
+            SwissEph ephemeris = EphemerisFactory.New();
 
             // Convert DOB to ET
             jul_day_ET = TimeToEphemerisTime(time);
@@ -7517,7 +7517,7 @@ namespace VedAstro.Library
             DateTime _convertJulianTimeToNormalTime()
             {
                 //initialize ephemeris
-                SwissEph ephemeris = new SwissEph();
+                SwissEph ephemeris = EphemerisFactory.New();
 
                 //set calender type
                 int gregflag = SwissEph.SE_GREG_CAL; //GREGORIAN CALENDAR
@@ -7637,7 +7637,7 @@ namespace VedAstro.Library
                 //Convert DOB to Julian Day
                 var jul_day_UT = TimeToJulianDay(time);
 
-                SwissEph swissEph = new SwissEph();
+                SwissEph swissEph = EphemerisFactory.New();
 
                 double[] cusps = new double[13];
 
@@ -10292,7 +10292,7 @@ namespace VedAstro.Library
                 string err = "";
                 double[] x = new double[6];
 
-                SwissEph ephemeris = new SwissEph();
+                SwissEph ephemeris = EphemerisFactory.New();
 
                 // Convert DOB to ET
                 var jul_day_ET = Calculate.TimeToEphemerisTime(time);
@@ -10430,7 +10430,7 @@ namespace VedAstro.Library
                 var monthLord = Library.PlanetName.Sun;
 
                 //initialize ephemeris
-                using SwissEph ephemeris = new SwissEph();
+                using SwissEph ephemeris = EphemerisFactory.New();
 
                 double ut_arghana = ephemeris.swe_julday(1827, 5, 2, 0, SwissEph.SE_GREG_CAL);
                 double ut_noon = Calculate.GreenwichLmtInJulianDays(time);

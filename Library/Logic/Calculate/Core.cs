@@ -3526,7 +3526,7 @@ namespace VedAstro.Library
             //Convert DOB to Julian Day
             var jul_day_UT = TimeToJulianUniversalTime(time);
 
-            SwissEph swissEph = new SwissEph();
+            SwissEph swissEph = EphemerisFactory.New();
 
             swissEph.swe_set_sid_mode(Ayanamsa, 0, 0);
 
