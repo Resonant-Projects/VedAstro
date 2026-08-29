@@ -6,12 +6,10 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization.Formatters.Binary;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
-//using Xfrogcn.BinaryFormatter;
-#pragma warning disable SYSLIB0011
 
 
 //IF I LIVED IN A WORLD WHERE JESUS DID NOT WALK
@@ -32,11 +30,21 @@ namespace VedAstro.Library
     public static class CacheManager
     {
 
-        static CacheManager()
+        private static readonly JsonSerializerOptions CacheSerializerOptions = new()
         {
-            // Existing disk caches use BinaryFormatter. Only load cache files created by VedAstro.
-            AppContext.SetSwitch("System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization", true);
-        }
+            IncludeFields = true
+        };
+
+        private static readonly HashSet<Type> AllowedSystemGenericTypes = new()
+        {
+            typeof(List<>),
+            typeof(Dictionary<,>),
+            typeof(ConcurrentDictionary<,>),
+            typeof(Nullable<>),
+            typeof(KeyValuePair<,>)
+        };
+
+        private sealed record CacheFileEntry(string Function, int Hash, string ValueType, JsonElement Value);
 
         private static object sync = new Object();
 
@@ -122,19 +130,12 @@ namespace VedAstro.Library
         public static void LoadCacheFromDisk0()
         {
             //get all existing cache file names
-            var foundFiles = Directory.GetFiles(Syntax.CacheFilePath, "cache*", SearchOption.TopDirectoryOnly);
+            var foundFiles = Directory.GetFiles(Syntax.CacheFilePath, "cache*.json", SearchOption.TopDirectoryOnly);
 
             //load each cache file to memory
             Parallel.ForEach(foundFiles, file =>
             {
-                //get the cache file from disk
-                using var stream = File.OpenRead(file);
-                var formatter = new BinaryFormatter();
-
-                //parse the cache
-#pragma warning disable SYSLIB0011
-                var cacheData = formatter.Deserialize(stream) as ConcurrentDictionary<CacheKey, object>;
-#pragma warning restore SYSLIB0011
+                var cacheData = deserializeCache(file);
 
                 //get name of the method the cache belongs to
                 var rawName = file.Split('_');
@@ -158,17 +159,11 @@ namespace VedAstro.Library
         private static void _loadCacheFromDisk()
         {
             //get all existing cache file names
-            var foundFiles = Directory.GetFiles(Syntax.CacheFilePath, "cache*", SearchOption.TopDirectoryOnly);
+            var foundFiles = Directory.GetFiles(Syntax.CacheFilePath, "cache*.json", SearchOption.TopDirectoryOnly);
 
             //load each cache file to memory
             Parallel.ForEach(foundFiles, file =>
             {
-                //get the cache file from disk
-                using var stream = File.OpenRead(file);
-#pragma warning disable SYSLIB0011 // Type or member is obsolete
-                var formatter = new BinaryFormatter();
-#pragma warning restore SYSLIB0011 // Type or member is obsolete
-
                 //get name of the method the cache belongs to
                 var rawName = file.Split('_');
                 var methodName = rawName[1];
@@ -178,9 +173,7 @@ namespace VedAstro.Library
                 //parse the cache
                 try
                 {
-#pragma warning disable SYSLIB0011
-                    cacheData = formatter.Deserialize(stream) as ConcurrentDictionary<CacheKey, object>;
-#pragma warning restore SYSLIB0011
+                    cacheData = deserializeCache(file);
 
                 }
                 //if fail just skip this cache file
@@ -282,20 +275,34 @@ namespace VedAstro.Library
             for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
                 //create a new file name based on the count to avoid collision (exp:cache_2.dat)
-                var newFileName = $"{Syntax.CacheFileName}_{cacheFileName}_{count + attempt}.dat";
+                var newFileName = $"{Syntax.CacheFileName}_{cacheFileName}_{count + attempt}.json";
 
                 try
                 {
-                    //create/overwrite the cache file
-                    using var stream = File.Create(newFileName);
-#pragma warning disable SYSLIB0011 // Type or member is obsolete
-                    var formatter = new BinaryFormatter();
-#pragma warning restore SYSLIB0011 // Type or member is obsolete
+                    var cacheData = (ConcurrentDictionary<CacheKey, object>)tempCacheList;
+                    var entries = new List<CacheFileEntry>();
+                    foreach (var cacheItem in cacheData)
+                    {
+                        var valueType = cacheItem.Value.GetType();
+                        if (!isAllowedCacheType(valueType))
+                        {
+                            LogManager.Error($"Skipping unsupported cache type: {valueType.FullName}");
+                            continue;
+                        }
 
-                    //save cache from memory to disk
-#pragma warning disable SYSLIB0011
-                    formatter.Serialize(stream, tempCacheList);
-#pragma warning restore SYSLIB0011
+                        var serializedValue = JsonSerializer.SerializeToElement(
+                            cacheItem.Value,
+                            valueType,
+                            CacheSerializerOptions);
+                        entries.Add(new CacheFileEntry(
+                            cacheItem.Key.Function,
+                            cacheItem.Key.UltimateHash,
+                            valueType.AssemblyQualifiedName!,
+                            serializedValue));
+                    }
+
+                    var serializedCache = JsonSerializer.Serialize(entries, CacheSerializerOptions);
+                    File.WriteAllText(newFileName, serializedCache);
                     return;
                 }
                 //if accessing the file failed, try again with a different name
@@ -309,6 +316,56 @@ namespace VedAstro.Library
                     return;
                 }
             }
+        }
+
+        private static ConcurrentDictionary<CacheKey, object> deserializeCache(string file)
+        {
+            var serializedCache = File.ReadAllText(file);
+            var entries = JsonSerializer.Deserialize<List<CacheFileEntry>>(
+                serializedCache,
+                CacheSerializerOptions) ?? new List<CacheFileEntry>();
+            var cacheData = new ConcurrentDictionary<CacheKey, object>();
+
+            foreach (var entry in entries)
+            {
+                var valueType = Type.GetType(entry.ValueType, throwOnError: false);
+                if (valueType == null || !isAllowedCacheType(valueType))
+                {
+                    LogManager.Error($"Skipping unsupported cache type: {entry.ValueType}");
+                    continue;
+                }
+
+                var value = entry.Value.Deserialize(valueType, CacheSerializerOptions);
+                if (value != null)
+                {
+                    cacheData.TryAdd(CacheKey.FromHash(entry.Function, entry.Hash), value);
+                }
+            }
+
+            return cacheData;
+        }
+
+        private static bool isAllowedCacheType(Type type)
+        {
+            if (type.Assembly == typeof(CacheManager).Assembly || type.IsEnum || type.IsPrimitive)
+            {
+                return true;
+            }
+
+            if (type == typeof(string) || type == typeof(decimal) || type == typeof(DateTime) ||
+                type == typeof(DateTimeOffset) || type == typeof(TimeSpan) || type == typeof(Guid))
+            {
+                return true;
+            }
+
+            if (type.IsArray)
+            {
+                return isAllowedCacheType(type.GetElementType()!);
+            }
+
+            return type.IsGenericType &&
+                   AllowedSystemGenericTypes.Contains(type.GetGenericTypeDefinition()) &&
+                   type.GetGenericArguments().All(isAllowedCacheType);
         }
 
         private static int getCacheFileCount()

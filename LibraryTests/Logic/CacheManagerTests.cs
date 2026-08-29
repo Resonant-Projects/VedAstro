@@ -8,7 +8,7 @@ namespace VedAstro.Library.Tests;
 public class CacheManagerTests
 {
     [TestMethod]
-    public void SaveCacheToDiskSupportsLegacyFormatterOnNet8()
+    public void SaveCacheToDiskUsesSafeJsonOnNet8()
     {
         var temporaryDirectory = Directory.CreateTempSubdirectory("vedastro-cache-");
         var originalCacheFileName = Syntax.CacheFileName;
@@ -28,11 +28,50 @@ public class CacheManagerTests
 
             var cacheFile = Directory.GetFiles(temporaryDirectory.FullName).Single();
             Assert.IsTrue(new FileInfo(cacheFile).Length > 0);
+
+            var deserializeMethod = typeof(CacheManager).GetMethod(
+                "deserializeCache",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.IsNotNull(deserializeMethod);
+            var restoredCache = (ConcurrentDictionary<CacheKey, object>)deserializeMethod.Invoke(
+                null,
+                new object[] { cacheFile })!;
+            Assert.AreEqual("value", restoredCache[new CacheKey("DiskCacheCompatibility", "key")]);
         }
         finally
         {
             Syntax.CacheFileName = originalCacheFileName;
             temporaryDirectory.Delete(recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void LoadCacheFromDiskRejectsUnapprovedTypes()
+    {
+        var cacheFile = Path.GetTempFileName();
+
+        try
+        {
+            File.WriteAllText(
+                cacheFile,
+                """
+                [{"Function":"Unsafe","Hash":1,"ValueType":"System.IO.FileInfo, System.Private.CoreLib","Value":{"OriginalPath":"/tmp/payload"}}]
+                """);
+
+            var deserializeMethod = typeof(CacheManager).GetMethod(
+                "deserializeCache",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.IsNotNull(deserializeMethod);
+            var restoredCache = (ConcurrentDictionary<CacheKey, object>)deserializeMethod.Invoke(
+                null,
+                new object[] { cacheFile })!;
+            Assert.AreEqual(0, restoredCache.Count);
+        }
+        finally
+        {
+            File.Delete(cacheFile);
         }
     }
 }

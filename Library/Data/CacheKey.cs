@@ -14,6 +14,8 @@ namespace VedAstro.Library
         //public object[] Args;
         private int _ultimateHash;
 
+        internal int UltimateHash => _ultimateHash;
+
         //CTOR
         public CacheKey(string function, params object[] args)
         {
@@ -26,6 +28,13 @@ namespace VedAstro.Library
 
             //combine them together
             _ultimateHash = functionNameHash + allArgumentsHash;
+        }
+
+        internal static CacheKey FromHash(string function, int ultimateHash)
+        {
+            var cacheKey = new CacheKey(function);
+            cacheKey._ultimateHash = ultimateHash;
+            return cacheKey;
         }
 
 
