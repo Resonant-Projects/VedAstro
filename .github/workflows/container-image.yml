@@ -11,7 +11,7 @@ on:
       source_ref:
         description: Fork branch, tag, or commit to build
         required: true
-        default: eec4bafc57161692610ac5b0e534a42d0560e093
+        default: 50de35e3010cf2c6b675cf4cb58e76dfcdacbfa6
         type: string
 
 permissions:
@@ -23,7 +23,7 @@ concurrency:
 
 env:
   IMAGE_NAME: ghcr.io/resonant-projects/vedastro
-  STABLE_SOURCE_REF: eec4bafc57161692610ac5b0e534a42d0560e093
+  STABLE_SOURCE_REF: 50de35e3010cf2c6b675cf4cb58e76dfcdacbfa6
 
 jobs:
   validate:
