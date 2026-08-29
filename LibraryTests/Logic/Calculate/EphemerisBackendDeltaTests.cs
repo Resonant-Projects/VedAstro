@@ -58,6 +58,29 @@ public class EphemerisBackendDeltaTests
     }
 
     [TestMethod]
+    public void EphemerisFilePathPreservesAsteroidSubdirectory()
+    {
+        string rootPath = Path.Combine(Path.GetTempPath(), "ephemeris");
+
+        string filePath = EphemerisFactory.ResolveEphemerisFilePath(rootPath, "ast4/se04179.se1");
+
+        Assert.AreEqual(
+            Path.Combine(Path.GetFullPath(rootPath), "ast4", "se04179.se1"),
+            filePath);
+    }
+
+    [TestMethod]
+    public void EphemerisFilePathRejectsTraversalOutsideConfiguredDirectory()
+    {
+        string rootPath = Path.Combine(Path.GetTempPath(), "ephemeris");
+
+        InvalidOperationException exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            EphemerisFactory.ResolveEphemerisFilePath(rootPath, "../secrets.se1"));
+
+        StringAssert.Contains(exception.Message, "escapes the configured directory");
+    }
+
+    [TestMethod]
     public void MeasureMoshierVsSwissDeltas()
     {
         DateTime startDate = new(1900, 1, 1);

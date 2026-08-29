@@ -21,7 +21,7 @@ namespace VedAstro.Library
                 string configuredPath = Environment.GetEnvironmentVariable("VEDASTRO_EPHEMERIS_PATH");
                 return string.IsNullOrEmpty(configuredPath)
                     ? Path.Combine(AppContext.BaseDirectory, "ephemeris")
-                    : configuredPath;
+                    : Path.GetFullPath(configuredPath);
             }
         }
 
@@ -32,10 +32,8 @@ namespace VedAstro.Library
             swissEph.swe_set_ephe_path(ephemerisFilesPath);
             swissEph.OnLoadFile += (_, e) =>
             {
-                string normalizedFileName = e.FileName.Replace('\\', '/');
-                int lastSeparator = normalizedFileName.LastIndexOf('/');
-                string fileName = normalizedFileName.Substring(lastSeparator + 1);
-                string filePath = Path.Combine(ephemerisFilesPath, fileName);
+                string filePath = ResolveEphemerisFilePath(ephemerisFilesPath, e.FileName);
+                string fileName = Path.GetFileName(filePath);
 
                 if (!File.Exists(filePath))
                 {
@@ -53,6 +51,28 @@ namespace VedAstro.Library
             };
 
             return swissEph;
+        }
+
+        internal static string ResolveEphemerisFilePath(string ephemerisFilesPath, string requestedFileName)
+        {
+            string rootPath = Path.GetFullPath(ephemerisFilesPath);
+            string normalizedFileName = requestedFileName.Replace('\\', Path.DirectorySeparatorChar);
+            string filePath = Path.GetFullPath(
+                Path.IsPathRooted(normalizedFileName)
+                    ? normalizedFileName
+                    : Path.Combine(rootPath, normalizedFileName));
+            string relativePath = Path.GetRelativePath(rootPath, filePath);
+
+            if (Path.IsPathRooted(relativePath)
+                || relativePath == ".."
+                || relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            {
+                throw CreateValidationException(
+                    ephemerisFilesPath,
+                    $"ephemeris file path '{requestedFileName}' escapes the configured directory");
+            }
+
+            return filePath;
         }
 
         public static void ValidateEphemerisFiles()
