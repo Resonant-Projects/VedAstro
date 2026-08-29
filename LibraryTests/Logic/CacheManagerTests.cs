@@ -297,20 +297,36 @@ public class CacheManagerTests
             File.WriteAllText(retryFile, "[]");
 
             var getFilesMethod = typeof(CacheManager).GetMethod(
-                "getCacheFilesForLoad",
+                "getCacheFileGroupsForLoad",
                 BindingFlags.NonPublic | BindingFlags.Static);
             Assert.IsNotNull(getFilesMethod);
 
             File.SetLastWriteTimeUtc(canonicalFile, DateTime.UtcNow.AddMinutes(-2));
             File.SetLastWriteTimeUtc(retryFile, DateTime.UtcNow.AddMinutes(-1));
             CollectionAssert.AreEqual(
-                new[] { retryFile },
-                (string[])getFilesMethod.Invoke(null, null)!);
+                new[] { retryFile, canonicalFile },
+                ((string[][])getFilesMethod.Invoke(null, null)!)[0]);
 
             File.SetLastWriteTimeUtc(canonicalFile, DateTime.UtcNow);
             CollectionAssert.AreEqual(
-                new[] { canonicalFile },
-                (string[])getFilesMethod.Invoke(null, null)!);
+                new[] { canonicalFile, retryFile },
+                ((string[][])getFilesMethod.Invoke(null, null)!)[0]);
+
+            File.WriteAllText(canonicalFile, "{");
+            File.SetLastWriteTimeUtc(canonicalFile, DateTime.UtcNow.AddMinutes(1));
+            File.SetLastWriteTimeUtc(retryFile, DateTime.UtcNow);
+            var orderedVariants = ((string[][])getFilesMethod.Invoke(null, null)!)[0];
+            var tryDeserializeMethod = typeof(CacheManager).GetMethod(
+                "tryDeserializeCacheVariants",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(tryDeserializeMethod);
+            object?[] arguments = { orderedVariants, null, null };
+
+            Assert.IsTrue((bool)tryDeserializeMethod.Invoke(null, arguments)!);
+            Assert.AreEqual(retryFile, arguments[1]);
+            Assert.AreEqual(
+                0,
+                ((ConcurrentDictionary<CacheKey, object>)arguments[2]!).Count);
         }
         finally
         {

@@ -325,19 +325,13 @@ namespace VedAstro.Library
         public static void LoadCacheFromDisk0()
         {
             //get all existing cache file names
-            var foundFiles = getCacheFilesForLoad();
+            var foundFileGroups = getCacheFileGroupsForLoad();
 
             //load each cache file to memory
-            Parallel.ForEach(foundFiles, file =>
+            Parallel.ForEach(foundFileGroups, files =>
             {
-                ConcurrentDictionary<CacheKey, object> cacheData;
-                try
+                if (!tryDeserializeCacheVariants(files, out var file, out var cacheData))
                 {
-                    cacheData = deserializeCache(file);
-                }
-                catch (Exception)
-                {
-                    LogManager.Error($"Loading cache failed : {file}");
                     return;
                 }
 
@@ -363,29 +357,19 @@ namespace VedAstro.Library
         private static void _loadCacheFromDisk()
         {
             //get all existing cache file names
-            var foundFiles = getCacheFilesForLoad();
+            var foundFileGroups = getCacheFileGroupsForLoad();
 
             //load each cache file to memory
-            Parallel.ForEach(foundFiles, file =>
+            Parallel.ForEach(foundFileGroups, files =>
             {
+                if (!tryDeserializeCacheVariants(files, out var file, out var cacheData))
+                {
+                    return;
+                }
+
                 //get name of the method the cache belongs to
                 var rawName = file.Split('_');
                 var methodName = rawName[1];
-
-                ConcurrentDictionary<CacheKey, object> cacheData;
-
-                //parse the cache
-                try
-                {
-                    cacheData = deserializeCache(file);
-
-                }
-                //if fail just skip this cache file
-                catch (Exception)
-                {
-                    LogManager.Error($"Loading cache failed : {rawName}");
-                    return;
-                }
 
 
                 //try load whole cache into memory
@@ -656,7 +640,7 @@ namespace VedAstro.Library
             return $"{Syntax.CacheFileName}_{cacheFileName}_{chunkSuffix}.json";
         }
 
-        private static string[] getCacheFilesForLoad()
+        private static string[][] getCacheFileGroupsForLoad()
         {
             return Directory
                 .GetFiles(Syntax.CacheFilePath, "cache*.json", SearchOption.TopDirectoryOnly)
@@ -664,8 +648,32 @@ namespace VedAstro.Library
                 .Select(group => group
                     .OrderByDescending(File.GetLastWriteTimeUtc)
                     .ThenByDescending(file => string.Equals(file, group.Key, StringComparison.Ordinal))
-                    .First())
+                    .ToArray())
                 .ToArray();
+        }
+
+        private static bool tryDeserializeCacheVariants(
+            IEnumerable<string> files,
+            out string selectedFile,
+            out ConcurrentDictionary<CacheKey, object> cacheData)
+        {
+            foreach (var file in files)
+            {
+                try
+                {
+                    cacheData = deserializeCache(file);
+                    selectedFile = file;
+                    return true;
+                }
+                catch (Exception)
+                {
+                    LogManager.Error($"Loading cache failed : {file}");
+                }
+            }
+
+            selectedFile = string.Empty;
+            cacheData = new ConcurrentDictionary<CacheKey, object>();
+            return false;
         }
 
         private static int getCacheFileCount()
