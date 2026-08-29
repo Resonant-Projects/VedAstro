@@ -37,7 +37,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Content Include="ephemeris\*.se1">
+		<Content Include="ephemeris\*.se1" Pack="true" PackagePath="contentFiles\any\any\ephemeris\%(Filename)%(Extension)" PackageCopyToOutput="true">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</Content>

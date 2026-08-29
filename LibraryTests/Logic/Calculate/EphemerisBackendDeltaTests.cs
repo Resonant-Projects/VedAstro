@@ -39,6 +39,25 @@ public class EphemerisBackendDeltaTests
     }
 
     [TestMethod]
+    public void UnsupportedEphemerisDateFailsInsteadOfFallingBackToMoshier()
+    {
+        using SwissEph swissEph = EphemerisFactory.New();
+        double julianDay = swissEph.swe_julday(1700, 1, 1, 0, SwissEph.SE_GREG_CAL);
+        double[] positions = new double[6];
+        string error = string.Empty;
+
+        InvalidOperationException exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            swissEph.swe_calc_ut(
+                julianDay,
+                SwissEph.SE_SUN,
+                SwissEph.SEFLG_SWIEPH,
+                positions,
+                ref error));
+
+        StringAssert.Contains(exception.Message, "not available for the requested date or body");
+    }
+
+    [TestMethod]
     public void MeasureMoshierVsSwissDeltas()
     {
         DateTime startDate = new(1900, 1, 1);
