@@ -3886,7 +3886,7 @@ namespace VedAstro.Library
             double[] results = new double[6];
             string err_msg = "";
             double jul_day_ET;
-            SwissEph ephemeris = new SwissEph();
+            using SwissEph ephemeris = EphemerisFactory.New();
 
             // Convert DOB to ET
             jul_day_ET = Calculate.TimeToJulianEphemerisTime(time);

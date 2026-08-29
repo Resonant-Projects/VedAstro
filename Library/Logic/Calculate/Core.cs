@@ -1948,7 +1948,7 @@ namespace VedAstro.Library
                 var julianLmtUtcTime = GreenwichLmtInJulianDays(timeAt12Am);
 
                 //do calculation for sunrise time
-                using SwissEph ephemeris = new();
+                using SwissEph ephemeris = EphemerisFactory.New();
                 int ret = ephemeris.swe_rise_trans(julianLmtUtcTime, planet, "", iflag, options, geopos, atpress, attemp, ref riseTimeRaw, ref errorMsg);
 
 
@@ -2004,7 +2004,7 @@ namespace VedAstro.Library
                 var julianLmtUtcTime = GreenwichLmtInJulianDays(timeAt12Am);
 
                 //do calculation for sunset time
-                using SwissEph ephemeris = new();
+                using SwissEph ephemeris = EphemerisFactory.New();
                 int ret = ephemeris.swe_rise_trans(julianLmtUtcTime, planet, "", iflag, options, geopos, atpress, attemp, ref setTimeRaw, ref errorMsg);
 
 
@@ -3526,7 +3526,7 @@ namespace VedAstro.Library
             //Convert DOB to Julian Day
             var jul_day_UT = TimeToJulianUniversalTime(time);
 
-            SwissEph swissEph = new SwissEph();
+            using SwissEph swissEph = EphemerisFactory.New();
 
             swissEph.swe_set_sid_mode(Ayanamsa, 0, 0);
 
