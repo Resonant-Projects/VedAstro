@@ -7,6 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
@@ -32,7 +33,12 @@ namespace VedAstro.Library
 
         private static readonly JsonSerializerOptions CacheSerializerOptions = new()
         {
-            IncludeFields = true
+            IncludeFields = true,
+            Converters =
+            {
+                new TimeCacheJsonConverter(),
+                new GeoLocationCacheJsonConverter()
+            }
         };
 
         private static readonly HashSet<Type> AllowedSystemGenericTypes = new()
@@ -41,10 +47,58 @@ namespace VedAstro.Library
             typeof(Dictionary<,>),
             typeof(ConcurrentDictionary<,>),
             typeof(Nullable<>),
-            typeof(KeyValuePair<,>)
+            typeof(KeyValuePair<,>),
+            typeof(ValueTuple<>),
+            typeof(ValueTuple<,>),
+            typeof(ValueTuple<,,>),
+            typeof(ValueTuple<,,,>),
+            typeof(ValueTuple<,,,,>),
+            typeof(ValueTuple<,,,,,>),
+            typeof(ValueTuple<,,,,,,>),
+            typeof(ValueTuple<,,,,,,,>)
         };
 
-        private sealed record CacheFileEntry(string Function, int Hash, string ValueType, JsonElement Value);
+        private sealed record CacheFileEntry(
+            string Function,
+            int Hash,
+            string ValueType,
+            JsonElement Value,
+            string? TaskResultType = null);
+
+        private sealed record TimeCacheValue(DateTimeOffset StdTime, GeoLocation Location);
+        private sealed record GeoLocationCacheValue(string Name, double Longitude, double Latitude);
+
+        private sealed class TimeCacheJsonConverter : JsonConverter<Time>
+        {
+            public override Time Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var value = JsonSerializer.Deserialize<TimeCacheValue>(ref reader, options)
+                            ?? throw new JsonException("Invalid cached Time value.");
+                return new Time(value.StdTime, value.Location);
+            }
+
+            public override void Write(Utf8JsonWriter writer, Time value, JsonSerializerOptions options) =>
+                JsonSerializer.Serialize(
+                    writer,
+                    new TimeCacheValue(value.GetStdDateTimeOffset(), value.GetGeoLocation()),
+                    options);
+        }
+
+        private sealed class GeoLocationCacheJsonConverter : JsonConverter<GeoLocation>
+        {
+            public override GeoLocation Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var value = JsonSerializer.Deserialize<GeoLocationCacheValue>(ref reader, options)
+                            ?? throw new JsonException("Invalid cached GeoLocation value.");
+                return new GeoLocation(value.Name, value.Longitude, value.Latitude);
+            }
+
+            public override void Write(Utf8JsonWriter writer, GeoLocation value, JsonSerializerOptions options) =>
+                JsonSerializer.Serialize(
+                    writer,
+                    new GeoLocationCacheValue(value.Name(), value.Longitude(), value.Latitude()),
+                    options);
+        }
 
         private static object sync = new Object();
 
@@ -284,6 +338,25 @@ namespace VedAstro.Library
                     foreach (var cacheItem in cacheData)
                     {
                         var valueType = cacheItem.Value.GetType();
+                        Type? taskResultType = null;
+                        object? valueToSerialize = cacheItem.Value;
+
+                        if (cacheItem.Value is Task task)
+                        {
+                            taskResultType = getTaskResultType(valueType);
+                            if (taskResultType == null || !task.IsCompletedSuccessfully)
+                            {
+                                LogManager.Error($"Skipping incomplete or non-generic cached task: {valueType.FullName}");
+                                continue;
+                            }
+
+                            valueToSerialize = typeof(Task<>)
+                                .MakeGenericType(taskResultType)
+                                .GetProperty(nameof(Task<object>.Result))!
+                                .GetValue(task);
+                            valueType = valueToSerialize?.GetType() ?? taskResultType;
+                        }
+
                         if (!isAllowedCacheType(valueType))
                         {
                             LogManager.Error($"Skipping unsupported cache type: {valueType.FullName}");
@@ -291,14 +364,15 @@ namespace VedAstro.Library
                         }
 
                         var serializedValue = JsonSerializer.SerializeToElement(
-                            cacheItem.Value,
+                            valueToSerialize,
                             valueType,
                             CacheSerializerOptions);
                         entries.Add(new CacheFileEntry(
                             cacheItem.Key.Function,
                             cacheItem.Key.UltimateHash,
                             valueType.AssemblyQualifiedName!,
-                            serializedValue));
+                            serializedValue,
+                            taskResultType?.AssemblyQualifiedName));
                     }
 
                     var serializedCache = JsonSerializer.Serialize(entries, CacheSerializerOptions);
@@ -336,10 +410,29 @@ namespace VedAstro.Library
                 }
 
                 var value = entry.Value.Deserialize(valueType, CacheSerializerOptions);
-                if (value != null)
+                if (value == null && entry.TaskResultType == null)
                 {
-                    cacheData.TryAdd(CacheKey.FromHash(entry.Function, entry.Hash), value);
+                    continue;
                 }
+
+                if (entry.TaskResultType != null)
+                {
+                    var taskResultType = Type.GetType(entry.TaskResultType, throwOnError: false);
+                    if (taskResultType == null ||
+                        (value != null && !taskResultType.IsAssignableFrom(valueType)) ||
+                        (value == null && taskResultType.IsValueType && Nullable.GetUnderlyingType(taskResultType) == null))
+                    {
+                        LogManager.Error($"Skipping unsupported cached task type: {entry.TaskResultType}");
+                        continue;
+                    }
+
+                    value = typeof(Task)
+                        .GetMethod(nameof(Task.FromResult))!
+                        .MakeGenericMethod(taskResultType)
+                        .Invoke(null, new[] { value })!;
+                }
+
+                cacheData.TryAdd(CacheKey.FromHash(entry.Function, entry.Hash), value);
             }
 
             return cacheData;
@@ -366,6 +459,19 @@ namespace VedAstro.Library
             return type.IsGenericType &&
                    AllowedSystemGenericTypes.Contains(type.GetGenericTypeDefinition()) &&
                    type.GetGenericArguments().All(isAllowedCacheType);
+        }
+
+        private static Type? getTaskResultType(Type type)
+        {
+            for (var currentType = type; currentType != null; currentType = currentType.BaseType)
+            {
+                if (currentType.IsGenericType && currentType.GetGenericTypeDefinition() == typeof(Task<>))
+                {
+                    return currentType.GetGenericArguments()[0];
+                }
+            }
+
+            return null;
         }
 
         private static int getCacheFileCount()

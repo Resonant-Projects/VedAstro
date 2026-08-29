@@ -47,6 +47,70 @@ public class CacheManagerTests
     }
 
     [TestMethod]
+    public async Task SaveCacheToDiskRestoresDomainValuesAndCompletedTasks()
+    {
+        var temporaryDirectory = Directory.CreateTempSubdirectory("vedastro-cache-domain-");
+        var originalCacheFileName = Syntax.CacheFileName;
+
+        try
+        {
+            Syntax.CacheFileName = Path.Combine(temporaryDirectory.FullName, "cache");
+            var location = new GeoLocation("Greenwich", 0, 51.4934);
+            var time = new Time(new DateTimeOffset(2000, 1, 1, 12, 30, 0, TimeSpan.Zero), location);
+            var cache = new ConcurrentDictionary<CacheKey, object>();
+            cache.TryAdd(new CacheKey("DomainRoundTrip", "location"), location);
+            cache.TryAdd(new CacheKey("DomainRoundTrip", "time"), time);
+            cache.TryAdd(new CacheKey("DomainRoundTrip", "task"), Task.FromResult(time));
+            cache.TryAdd(new CacheKey("DomainRoundTrip", "null-task"), Task.FromResult<string?>(null));
+            cache.TryAdd(
+                new CacheKey("DomainRoundTrip", "tuple-task"),
+                Task.FromResult((true, location)));
+
+            var saveMethod = typeof(CacheManager).GetMethod(
+                "saveCacheInNewFile",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            var deserializeMethod = typeof(CacheManager).GetMethod(
+                "deserializeCache",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.IsNotNull(saveMethod);
+            Assert.IsNotNull(deserializeMethod);
+            saveMethod.Invoke(null, new object[] { "DomainRoundTrip", 1, cache });
+
+            var cacheFile = Directory.GetFiles(temporaryDirectory.FullName).Single();
+            var restoredCache = (ConcurrentDictionary<CacheKey, object>)deserializeMethod.Invoke(
+                null,
+                new object[] { cacheFile })!;
+
+            var restoredLocation = (GeoLocation)restoredCache[new CacheKey("DomainRoundTrip", "location")];
+            Assert.AreEqual(location.Name(), restoredLocation.Name());
+            Assert.AreEqual(location.Longitude(), restoredLocation.Longitude());
+            Assert.AreEqual(location.Latitude(), restoredLocation.Latitude());
+
+            var restoredTime = (Time)restoredCache[new CacheKey("DomainRoundTrip", "time")];
+            Assert.AreEqual(time.GetStdDateTimeOffset(), restoredTime.GetStdDateTimeOffset());
+            Assert.AreEqual(location, restoredTime.GetGeoLocation());
+
+            var restoredTask = (Task<Time>)restoredCache[new CacheKey("DomainRoundTrip", "task")];
+            Assert.AreEqual(time.GetStdDateTimeOffset(), (await restoredTask).GetStdDateTimeOffset());
+
+            var restoredNullTask = (Task<string?>)restoredCache[new CacheKey("DomainRoundTrip", "null-task")];
+            Assert.IsNull(await restoredNullTask);
+
+            var restoredTupleTask =
+                (Task<(bool, GeoLocation)>)restoredCache[new CacheKey("DomainRoundTrip", "tuple-task")];
+            var restoredTuple = await restoredTupleTask;
+            Assert.IsTrue(restoredTuple.Item1);
+            Assert.AreEqual(location, restoredTuple.Item2);
+        }
+        finally
+        {
+            Syntax.CacheFileName = originalCacheFileName;
+            temporaryDirectory.Delete(recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void LoadCacheFromDiskRejectsUnapprovedTypes()
     {
         var cacheFile = Path.GetTempFileName();
