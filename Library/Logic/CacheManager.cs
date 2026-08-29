@@ -58,6 +58,12 @@ namespace VedAstro.Library
             typeof(ValueTuple<,,,,,,,>)
         };
 
+        private static readonly HashSet<Type> AllowedLibraryCacheTypes = new()
+        {
+            typeof(Time),
+            typeof(GeoLocation)
+        };
+
         private sealed record CacheFileEntry(
             string Function,
             int Hash,
@@ -328,8 +334,7 @@ namespace VedAstro.Library
             const int maxAttempts = 3;
             for (var attempt = 0; attempt < maxAttempts; attempt++)
             {
-                //create a new file name based on the count to avoid collision (exp:cache_2.dat)
-                var newFileName = $"{Syntax.CacheFileName}_{cacheFileName}_{count + attempt}.json";
+                var newFileName = buildCacheFileName(cacheFileName, count, attempt);
 
                 try
                 {
@@ -440,7 +445,7 @@ namespace VedAstro.Library
 
         private static bool isAllowedCacheType(Type type)
         {
-            if (type.Assembly == typeof(CacheManager).Assembly || type.IsEnum || type.IsPrimitive)
+            if (AllowedLibraryCacheTypes.Contains(type) || type.IsEnum || type.IsPrimitive)
             {
                 return true;
             }
@@ -472,6 +477,12 @@ namespace VedAstro.Library
             }
 
             return null;
+        }
+
+        private static string buildCacheFileName(string cacheFileName, int count, int attempt)
+        {
+            var chunkSuffix = attempt == 0 ? count.ToString() : $"{count}_retry{attempt}";
+            return $"{Syntax.CacheFileName}_{cacheFileName}_{chunkSuffix}.json";
         }
 
         private static int getCacheFileCount()

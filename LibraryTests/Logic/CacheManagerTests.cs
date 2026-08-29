@@ -138,4 +138,53 @@ public class CacheManagerTests
             File.Delete(cacheFile);
         }
     }
+
+    [TestMethod]
+    public void SaveCacheToDiskRejectsDomainTypesWithoutExplicitConverters()
+    {
+        var temporaryDirectory = Directory.CreateTempSubdirectory("vedastro-cache-unsupported-");
+        var originalCacheFileName = Syntax.CacheFileName;
+
+        try
+        {
+            Syntax.CacheFileName = Path.Combine(temporaryDirectory.FullName, "cache");
+            var cache = new ConcurrentDictionary<CacheKey, object>();
+            cache.TryAdd(new CacheKey("UnsupportedDomain", "house"), new House());
+
+            var saveMethod = typeof(CacheManager).GetMethod(
+                "saveCacheInNewFile",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.IsNotNull(saveMethod);
+            saveMethod.Invoke(null, new object[] { "UnsupportedDomain", 1, cache });
+
+            var cacheFile = Directory.GetFiles(temporaryDirectory.FullName).Single();
+            Assert.AreEqual("[]", File.ReadAllText(cacheFile));
+        }
+        finally
+        {
+            Syntax.CacheFileName = originalCacheFileName;
+            temporaryDirectory.Delete(recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void CacheRetryFileNamesCannotCollideWithNumberedChunks()
+    {
+        var buildFileNameMethod = typeof(CacheManager).GetMethod(
+            "buildCacheFileName",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.IsNotNull(buildFileNameMethod);
+        var retriedFirstChunk = (string)buildFileNameMethod.Invoke(
+            null,
+            new object[] { "Collision", 1, 1 })!;
+        var normalSecondChunk = (string)buildFileNameMethod.Invoke(
+            null,
+            new object[] { "Collision", 2, 0 })!;
+
+        Assert.AreNotEqual(retriedFirstChunk, normalSecondChunk);
+        StringAssert.EndsWith(retriedFirstChunk, "_1_retry1.json");
+        StringAssert.EndsWith(normalSecondChunk, "_2.json");
+    }
 }
