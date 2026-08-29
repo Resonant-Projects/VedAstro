@@ -62,6 +62,7 @@ public class CacheManagerTests
             cache.TryAdd(new CacheKey("DomainRoundTrip", "time"), time);
             cache.TryAdd(new CacheKey("DomainRoundTrip", "task"), Task.FromResult(time));
             cache.TryAdd(new CacheKey("DomainRoundTrip", "null-task"), Task.FromResult<string?>(null));
+            cache.TryAdd(new CacheKey("DomainRoundTrip", "nullable-task"), Task.FromResult<int?>(42));
             cache.TryAdd(
                 new CacheKey("DomainRoundTrip", "tuple-task"),
                 Task.FromResult((true, location)));
@@ -96,6 +97,10 @@ public class CacheManagerTests
 
             var restoredNullTask = (Task<string?>)restoredCache[new CacheKey("DomainRoundTrip", "null-task")];
             Assert.IsNull(await restoredNullTask);
+
+            var restoredNullableTask =
+                (Task<int?>)restoredCache[new CacheKey("DomainRoundTrip", "nullable-task")];
+            Assert.AreEqual(42, await restoredNullableTask);
 
             var restoredTupleTask =
                 (Task<(bool, GeoLocation)>)restoredCache[new CacheKey("DomainRoundTrip", "tuple-task")];
@@ -186,5 +191,45 @@ public class CacheManagerTests
         Assert.AreNotEqual(retriedFirstChunk, normalSecondChunk);
         StringAssert.EndsWith(retriedFirstChunk, "_1_retry1.json");
         StringAssert.EndsWith(normalSecondChunk, "_2.json");
+    }
+
+    [TestMethod]
+    public void UnsupportedOrNullEntriesDoNotDropValidChunkEntries()
+    {
+        var temporaryDirectory = Directory.CreateTempSubdirectory("vedastro-cache-partial-");
+        var originalCacheFileName = Syntax.CacheFileName;
+
+        try
+        {
+            Syntax.CacheFileName = Path.Combine(temporaryDirectory.FullName, "cache");
+            var cache = new ConcurrentDictionary<CacheKey, object>();
+            cache.TryAdd(new CacheKey("PartialChunk", "valid"), "kept");
+            cache.TryAdd(new CacheKey("PartialChunk", "multidimensional"), new int[1, 1]);
+            cache.TryAdd(new CacheKey("PartialChunk", "null"), null!);
+
+            var saveMethod = typeof(CacheManager).GetMethod(
+                "saveCacheInNewFile",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            var deserializeMethod = typeof(CacheManager).GetMethod(
+                "deserializeCache",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.IsNotNull(saveMethod);
+            Assert.IsNotNull(deserializeMethod);
+            saveMethod.Invoke(null, new object[] { "PartialChunk", 1, cache });
+
+            var cacheFile = Directory.GetFiles(temporaryDirectory.FullName).Single();
+            var restoredCache = (ConcurrentDictionary<CacheKey, object>)deserializeMethod.Invoke(
+                null,
+                new object[] { cacheFile })!;
+
+            Assert.AreEqual(1, restoredCache.Count);
+            Assert.AreEqual("kept", restoredCache[new CacheKey("PartialChunk", "valid")]);
+        }
+        finally
+        {
+            Syntax.CacheFileName = originalCacheFileName;
+            temporaryDirectory.Delete(recursive: true);
+        }
     }
 }

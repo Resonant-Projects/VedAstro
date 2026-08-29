@@ -342,6 +342,12 @@ namespace VedAstro.Library
                     var entries = new List<CacheFileEntry>();
                     foreach (var cacheItem in cacheData)
                     {
+                        if (cacheItem.Value == null)
+                        {
+                            LogManager.Error("Skipping null cache value because its declared type is unavailable.");
+                            continue;
+                        }
+
                         var valueType = cacheItem.Value.GetType();
                         Type? taskResultType = null;
                         object? valueToSerialize = cacheItem.Value;
@@ -423,8 +429,13 @@ namespace VedAstro.Library
                 if (entry.TaskResultType != null)
                 {
                     var taskResultType = Type.GetType(entry.TaskResultType, throwOnError: false);
+                    var nullableResultType = taskResultType == null
+                        ? null
+                        : Nullable.GetUnderlyingType(taskResultType);
                     if (taskResultType == null ||
-                        (value != null && !taskResultType.IsAssignableFrom(valueType)) ||
+                        (value != null &&
+                         !taskResultType.IsAssignableFrom(valueType) &&
+                         nullableResultType != valueType) ||
                         (value == null && taskResultType.IsValueType && Nullable.GetUnderlyingType(taskResultType) == null))
                     {
                         LogManager.Error($"Skipping unsupported cached task type: {entry.TaskResultType}");
@@ -458,7 +469,7 @@ namespace VedAstro.Library
 
             if (type.IsArray)
             {
-                return isAllowedCacheType(type.GetElementType()!);
+                return type.GetArrayRank() == 1 && isAllowedCacheType(type.GetElementType()!);
             }
 
             return type.IsGenericType &&
