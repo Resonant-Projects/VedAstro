@@ -37,6 +37,12 @@ public class CompatibilityMatchReportTests
             new GeoLocation($"{label} female", femaleLongitude, femaleLatitude));
 
         var report = Calculate.MatchReport(maleTime, femaleTime);
+        var grahaMaitram = report.PredictionList
+            .Single(prediction => prediction.Name == MatchPredictionName.GrahaMaitram);
+        var maleLord = Calculate.LordOfZodiacSign(
+            Calculate.PlanetRasiD1Sign(PlanetName.Moon, maleTime).GetSignName());
+        var femaleLord = Calculate.LordOfZodiacSign(
+            Calculate.PlanetRasiD1Sign(PlanetName.Moon, femaleTime).GetSignName());
         var emptyPredictionIndexes = report.PredictionList
             .Select((prediction, index) => (prediction, index))
             .Where(item =>
@@ -54,5 +60,7 @@ public class CompatibilityMatchReportTests
             1,
             report.PredictionList.Count(prediction => prediction.Name == MatchPredictionName.GrahaMaitram),
             label);
+        Assert.AreEqual(maleLord, femaleLord, $"{label}; expected equal Moon-sign lords");
+        Assert.AreEqual(EventNature.Good, grahaMaitram.Nature, label);
     }
 }
