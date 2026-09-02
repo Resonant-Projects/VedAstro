@@ -1,6 +1,7 @@
 ﻿using VedAstro.Library;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Newtonsoft.Json.Linq;
 using System.Reflection;
 
 
@@ -11,6 +12,7 @@ namespace API
 
         //.../Calculate/Karana/Location/Singapore/Time/23:59/31/12/2000/+08:00
         private const string CalculateRoute = $"{nameof(Calculate)}/{{calculatorName}}/{{*fullParamString}}"; //* that captures the rest of the URL path
+        private const string CalculatePostRoute = $"{nameof(Calculate)}/{{calculatorName}}";
 
         [Function(nameof(ListAllCalls))]
         public static async Task<HttpResponseData> ListAllCalls(
@@ -49,11 +51,40 @@ namespace API
         string fullParamString
         )
         {
-            //if API key is present allows full speed call, else only allows slowed speed call except if browser
-            fullParamString = await ThrottleManager.HandleCall(incomingRequest, fullParamString);
+            return await CalculateFromParameterPath(incomingRequest, calculatorName, fullParamString);
+        }
 
+        /// <summary>
+        /// Fixed-path calculator gateway. Parameter values stay in the JSON body
+        /// and are adapted to the established path-segment parser.
+        /// </summary>
+        [Function(nameof(CalculatePost))]
+        public static async Task<HttpResponseData> CalculatePost(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = CalculatePostRoute)] HttpRequestData incomingRequest,
+            string calculatorName)
+        {
             try
             {
+                var fullParamString = await ParameterPathFromPostBody(incomingRequest);
+                return await CalculateFromParameterPath(incomingRequest, calculatorName, fullParamString);
+            }
+            catch (Exception e)
+            {
+                APILogger.Error(e, incomingRequest);
+                return APITools.FailMessageJson(APITools.GetInnermostExceptionMessage(e), incomingRequest);
+            }
+        }
+
+        private static async Task<HttpResponseData> CalculateFromParameterPath(
+            HttpRequestData incomingRequest,
+            string calculatorName,
+            string fullParamString)
+        {
+            try
+            {
+                //if API key is present allows full speed call, else only allows slowed speed call except if browser
+                fullParamString = await ThrottleManager.HandleCall(incomingRequest, fullParamString);
+
                 //0 : LOG CALL : used later for throttle limit
                 //ApiStatistic.Log(incomingRequest); //logger
 
@@ -86,6 +117,32 @@ namespace API
                 return APITools.FailMessageJson(APITools.GetInnermostExceptionMessage(e), incomingRequest);
             }
 
+        }
+
+        private static async Task<string> ParameterPathFromPostBody(HttpRequestData incomingRequest)
+        {
+            var requestJson = await APITools.ExtractDataFromRequestJson(incomingRequest);
+            var parameters = requestJson.GetValue("parameters", StringComparison.OrdinalIgnoreCase) as JArray
+                ?? throw new ArgumentException("JSON body must contain a parameters array.");
+
+            var segments = new List<string>(parameters.Count);
+            foreach (var token in parameters)
+            {
+                if (token.Type != JTokenType.String)
+                {
+                    throw new ArgumentException("Every parameters entry must be a string.");
+                }
+
+                var segment = token.Value<string>();
+                if (string.IsNullOrEmpty(segment) || segment.Contains('/'))
+                {
+                    throw new ArgumentException("Parameter strings must be non-empty path segments without slashes.");
+                }
+
+                segments.Add(segment);
+            }
+
+            return string.Join('/', segments);
         }
 
         //------------------------------------------PRIVATE FUNC------------------------
@@ -257,15 +314,19 @@ namespace API
             if (isCustomAyanamsa)
             {
                 //scan URL and take out ayanamsa and set it
-                var splitParamString = fullParamString?.Split('/') ?? Array.Empty<string>();
+                var paramString = fullParamString ?? "";
+                var splitParamString = paramString.Split('/');
                 var ayanamsaLocation = Array.IndexOf(splitParamString, nameof(Ayanamsa));
-                var ayanamsaUrl = $"/{splitParamString[ayanamsaLocation]}/{splitParamString[ayanamsaLocation + 1]}";
+                var ayanamsaPath = $"{splitParamString[ayanamsaLocation]}/{splitParamString[ayanamsaLocation + 1]}";
+                var ayanamsaUrl = $"/{ayanamsaPath}";
 
                 //set ayanamsa
                 VedAstro.Library.Calculate.Ayanamsa = (int)Tools.EnumFromUrl(ayanamsaUrl);
 
                 //remove ayanamsa from URL
-                fullParamString = fullParamString?.Replace(ayanamsaUrl, "");
+                fullParamString = ayanamsaLocation == 0
+                    ? paramString[ayanamsaPath.Length..].TrimStart('/')
+                    : paramString.Replace(ayanamsaUrl, "");
 
                 return fullParamString ?? "";
             }
