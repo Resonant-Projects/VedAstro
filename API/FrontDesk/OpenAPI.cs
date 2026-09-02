@@ -80,11 +80,11 @@ namespace API
             string calculatorName,
             string fullParamString)
         {
-            //if API key is present allows full speed call, else only allows slowed speed call except if browser
-            fullParamString = await ThrottleManager.HandleCall(incomingRequest, fullParamString);
-
             try
             {
+                //if API key is present allows full speed call, else only allows slowed speed call except if browser
+                fullParamString = await ThrottleManager.HandleCall(incomingRequest, fullParamString);
+
                 //0 : LOG CALL : used later for throttle limit
                 //ApiStatistic.Log(incomingRequest); //logger
 
