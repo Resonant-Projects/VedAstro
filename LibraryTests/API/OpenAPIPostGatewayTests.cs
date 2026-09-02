@@ -21,6 +21,9 @@ public class OpenAPIPostGatewayTests
     [DataRow(
         "PlanetNirayanaLongitude",
         "PlanetName/Sun/Location/12.9716,77.5946/Time/00:05/29/02/2000/+05:30/Ayanamsa/LAHIRI")]
+    [DataRow(
+        "MoonSignName",
+        "Ayanamsa/RAMAN/Location/40.7128,-74.0060/Time/12:00/01/12/1985/-05:00")]
     public async Task PostReturnsTheExactGetEnvelopeForTheSameSegments(
         string calculatorName,
         string parameterPath)

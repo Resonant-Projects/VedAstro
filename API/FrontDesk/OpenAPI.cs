@@ -314,15 +314,19 @@ namespace API
             if (isCustomAyanamsa)
             {
                 //scan URL and take out ayanamsa and set it
-                var splitParamString = fullParamString?.Split('/') ?? Array.Empty<string>();
+                var paramString = fullParamString ?? "";
+                var splitParamString = paramString.Split('/');
                 var ayanamsaLocation = Array.IndexOf(splitParamString, nameof(Ayanamsa));
-                var ayanamsaUrl = $"/{splitParamString[ayanamsaLocation]}/{splitParamString[ayanamsaLocation + 1]}";
+                var ayanamsaPath = $"{splitParamString[ayanamsaLocation]}/{splitParamString[ayanamsaLocation + 1]}";
+                var ayanamsaUrl = $"/{ayanamsaPath}";
 
                 //set ayanamsa
                 VedAstro.Library.Calculate.Ayanamsa = (int)Tools.EnumFromUrl(ayanamsaUrl);
 
                 //remove ayanamsa from URL
-                fullParamString = fullParamString?.Replace(ayanamsaUrl, "");
+                fullParamString = ayanamsaLocation == 0
+                    ? paramString[ayanamsaPath.Length..].TrimStart('/')
+                    : paramString.Replace(ayanamsaUrl, "");
 
                 return fullParamString ?? "";
             }
