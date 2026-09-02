@@ -1286,7 +1286,7 @@ namespace VedAstro.Library
             //When the lords of the Janma Rasis of the
             // bride and bridegroom are friends, then Rasi
             // Kuta is said to obtain in full.
-            if (isMaleFriend && isFemaleFriend)
+            else if (isMaleFriend && isFemaleFriend)
             {
                 prediction.Nature = EventNature.Good;
                 prediction.Info = "Rasi Kuta is said to obtain in full.";
@@ -1627,16 +1627,22 @@ namespace VedAstro.Library
             var occuring = moonSignIsLagna || lagna7thFromLord;
 
 
-            //fill details to show user if occuring, else nothing
-            var prediction = new MatchPrediction();
+            var prediction = new MatchPrediction
+            {
+                Name = MatchPredictionName.LagnaAnd7thGood,
+                Description = "special combination",
+                MaleInfo = maleLagna.ToString(),
+                FemaleInfo = femaleLagna.ToString()
+            };
             if (occuring)
             {
-                prediction.Name = MatchPredictionName.LagnaAnd7thGood;
                 prediction.Nature = EventNature.Good;
                 prediction.Info = "marriage stable, mutual understanding and affection";
-                prediction.Description = "special combination";
-                prediction.MaleInfo = maleLagna.ToString();
-                prediction.FemaleInfo = femaleLagna.ToString();
+            }
+            else
+            {
+                prediction.Nature = EventNature.Neutral;
+                prediction.Info = "special combination is not present";
             }
 
             return prediction;
