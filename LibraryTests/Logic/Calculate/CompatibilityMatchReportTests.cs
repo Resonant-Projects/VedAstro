@@ -39,6 +39,8 @@ public class CompatibilityMatchReportTests
         var report = Calculate.MatchReport(maleTime, femaleTime);
         var grahaMaitram = report.PredictionList
             .Single(prediction => prediction.Name == MatchPredictionName.GrahaMaitram);
+        var lagnaAndHouse7Good = report.PredictionList
+            .Single(prediction => prediction.Name == MatchPredictionName.LagnaAnd7thGood);
         var maleLord = Calculate.LordOfZodiacSign(
             Calculate.PlanetRasiD1Sign(PlanetName.Moon, maleTime).GetSignName());
         var femaleLord = Calculate.LordOfZodiacSign(
@@ -62,5 +64,6 @@ public class CompatibilityMatchReportTests
             label);
         Assert.AreEqual(maleLord, femaleLord, $"{label}; expected equal Moon-sign lords");
         Assert.AreEqual(EventNature.Good, grahaMaitram.Nature, label);
+        Assert.AreEqual(EventNature.Neutral, lagnaAndHouse7Good.Nature, label);
     }
 }
