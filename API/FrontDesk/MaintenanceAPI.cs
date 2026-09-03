@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using VedAstro.Library;
@@ -12,6 +13,15 @@ public static class MaintenanceAPI
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "version")]
         HttpRequestData incomingRequest)
     {
+        _ = OpenAPI.StartCalculatorWarmup();
+        if (!OpenAPI.IsCalculatorReady)
+        {
+            var warmingUp = incomingRequest.CreateResponse(HttpStatusCode.ServiceUnavailable);
+            warmingUp.Headers.Add("Retry-After", "1");
+            warmingUp.WriteString("Calculator engine is warming up.");
+            return warmingUp;
+        }
+
         var sourceRevision = Environment.GetEnvironmentVariable("VEDASTRO_SOURCE_REVISION");
         if (string.IsNullOrWhiteSpace(sourceRevision))
         {

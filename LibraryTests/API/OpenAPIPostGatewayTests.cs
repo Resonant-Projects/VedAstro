@@ -14,6 +14,16 @@ namespace VedAstro.Library.Tests;
 [TestClass]
 public class OpenAPIPostGatewayTests
 {
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task ReadinessWarmupCompletesTheProviderCalculationPath()
+    {
+        var warmup = await OpenAPI.StartCalculatorWarmup();
+
+        Assert.AreEqual(PlanetName.All9Planets.Count, warmup.PlanetCount);
+        Assert.AreEqual("Pisces", warmup.Ascendant);
+    }
+
     [DataTestMethod]
     [DataRow(
         "MoonSignName",
@@ -50,6 +60,49 @@ public class OpenAPIPostGatewayTests
         var envelope = JObject.Parse(postBody);
         Assert.AreEqual("Pass", envelope.Value<string>("Status"));
         Assert.IsNotNull(envelope["Payload"]?[calculatorName]);
+    }
+
+    [DataTestMethod]
+    [DataRow("12:34:56", "1990-01-01T12:34:56+05:30")]
+    [DataRow("12:34:56.789", "1990-01-01T12:34:56.789+05:30")]
+    public async Task PostPreservesSubMinuteTimeSegments(string clock, string expectedTimestamp)
+    {
+        var parameterPath =
+            $"PlanetName/Sun/Location/28.6139,77.2090/Time/{clock}/01/01/1990/+05:30/Ayanamsa/LAHIRI";
+        var postRequest = TestHttpRequestData.Create(
+            "POST",
+            new Uri("http://localhost:7071/api/Calculate/PlanetNirayanaLongitude"),
+            PostBody(parameterPath));
+        var getRequest = TestHttpRequestData.Create(
+            "GET",
+            new Uri($"http://localhost:7071/api/Calculate/PlanetNirayanaLongitude/{parameterPath}"));
+
+        var parsedTime = (Time)await Time.FromUrl(
+            $"Location/28.6139,77.2090/Time/{clock}/01/01/1990/+05:30");
+        var postResponse = await OpenAPI.CalculatePost(
+            postRequest,
+            "PlanetNirayanaLongitude");
+        var getResponse = await OpenAPI.Calculate(
+            getRequest,
+            "PlanetNirayanaLongitude",
+            parameterPath);
+        var postBody = await ResponseBody(postResponse);
+        var getBody = await ResponseBody(getResponse);
+        var envelope = JObject.Parse(postBody);
+
+        Assert.AreEqual(DateTimeOffset.Parse(expectedTimestamp), parsedTime.GetStdDateTimeOffset());
+        Assert.AreEqual(
+            parsedTime.GetStdDateTimeOffset(),
+            Time.FromJson(parsedTime.ToJson()).GetStdDateTimeOffset());
+        Assert.AreEqual(
+            $"/Location/28.6139,77.2090/Time/{clock}/01/01/1990/+05:30",
+            parsedTime.ToUrl());
+        Assert.AreEqual(
+            $"/Time/{clock}/01/01/1990/+05:30",
+            parsedTime.GetStdDateTimeOffset().ToUrl());
+        Assert.AreEqual(getBody, postBody);
+        Assert.AreEqual("Pass", envelope.Value<string>("Status"));
+        Assert.IsNotNull(envelope["Payload"]?["PlanetNirayanaLongitude"]);
     }
 
     [TestMethod]

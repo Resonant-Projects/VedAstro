@@ -2175,19 +2175,33 @@ namespace VedAstro.Library
         /// </summary>
         public static string ToUrl(this DateTimeOffset dateTimeOffset)
         {
-
-            var part1 = dateTimeOffset.ToString("HH:mm");
-            var part2 = dateTimeOffset.ToString("dd/MM/yyyy");
-            var part3 = dateTimeOffset.ToString("zzz"); //timezone separate so can clean date time
-
-            //god knows why, in some time zones date comes with "." instead of "/" (despite above formatting)
-            part2 = part2.Replace('.', '/');
-
-            //god knows why, in some time zones date comes with "-" instead of "/" (despite above formatting)
-            part2 = part2.Replace('-', '/');
+            var part1 = TimeOfDayToUrl(dateTimeOffset);
+            var part2 = dateTimeOffset.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+            var part3 = dateTimeOffset.ToString("zzz", CultureInfo.InvariantCulture);
 
             var url = $"/Time/{part1}/{part2}/{part3}";
             return url;
+        }
+
+        /// <summary>
+        /// Formats a clock value for the OpenAPI time segment without discarding
+        /// seconds or fractional seconds. Minute-aligned values retain the legacy
+        /// HH:mm representation.
+        /// </summary>
+        internal static string TimeOfDayToUrl(DateTimeOffset dateTimeOffset)
+        {
+            var timeOfDayTicks = dateTimeOffset.TimeOfDay.Ticks;
+            if (timeOfDayTicks % TimeSpan.TicksPerMinute == 0)
+            {
+                return dateTimeOffset.ToString("HH:mm", CultureInfo.InvariantCulture);
+            }
+
+            if (timeOfDayTicks % TimeSpan.TicksPerSecond == 0)
+            {
+                return dateTimeOffset.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+            }
+
+            return dateTimeOffset.ToString("HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture);
         }
 
 
