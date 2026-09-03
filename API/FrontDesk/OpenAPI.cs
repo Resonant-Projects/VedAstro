@@ -14,6 +14,55 @@ namespace API
         private const string CalculateRoute = $"{nameof(Calculate)}/{{calculatorName}}/{{*fullParamString}}"; //* that captures the rest of the URL path
         private const string CalculatePostRoute = $"{nameof(Calculate)}/{{calculatorName}}";
 
+        internal readonly record struct CalculatorWarmupResult(int PlanetCount, string Ascendant);
+        private static readonly Lazy<Task<CalculatorWarmupResult>> CalculatorWarmup = new(
+            () => Task.Run(WarmUpCalculatorGateway),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+
+        internal static Task<CalculatorWarmupResult> StartCalculatorWarmup() => CalculatorWarmup.Value;
+
+        internal static bool IsCalculatorReady =>
+            CalculatorWarmup.IsValueCreated && CalculatorWarmup.Value.IsCompletedSuccessfully;
+
+        /// <summary>
+        /// Exercises the same parser, reflection dispatcher, All expansion, cache,
+        /// and Swiss-Ephemeris calculations used by the provider's first natal call.
+        /// The version probe starts this after the Functions worker has initialized
+        /// and remains non-ready until it succeeds.
+        /// </summary>
+        internal static async Task<CalculatorWarmupResult> WarmUpCalculatorGateway()
+        {
+            var startedAt = System.Diagnostics.Stopwatch.StartNew();
+            const string timePath =
+                "Location/28.6139,77.2090/Time/12:00/01/01/1990/+05:30/Ayanamsa/LAHIRI";
+
+            try
+            {
+                var planetLongitudes = (Dictionary<string, dynamic>)await HandleOpenAPICalls(
+                    nameof(VedAstro.Library.Calculate.PlanetNirayanaLongitude),
+                    $"PlanetName/All/{timePath}");
+                var ascendant = await HandleOpenAPICalls(
+                    nameof(VedAstro.Library.Calculate.LagnaSignName),
+                    timePath);
+
+                if (planetLongitudes.Count != PlanetName.All9Planets.Count || ascendant is null)
+                {
+                    throw new InvalidOperationException("Calculator gateway warm-up returned an incomplete result.");
+                }
+
+                var result = new CalculatorWarmupResult(planetLongitudes.Count, ascendant.ToString());
+                Console.WriteLine(
+                    $"Calculator gateway warm-up completed in {startedAt.ElapsedMilliseconds} ms " +
+                    $"({result.PlanetCount} planets; ascendant {result.Ascendant}).");
+                return result;
+            }
+            catch (Exception exception)
+            {
+                Console.Error.WriteLine($"Calculator gateway warm-up failed: {exception}");
+                throw;
+            }
+        }
+
         [Function(nameof(ListAllCalls))]
         public static async Task<HttpResponseData> ListAllCalls(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "ListAllCalls")] HttpRequestData incomingRequest
@@ -82,6 +131,10 @@ namespace API
         {
             try
             {
+                //All callers share the one background warm-up. A correctly configured
+                //deployment will not receive traffic until /api/version reports ready.
+                await StartCalculatorWarmup();
+
                 //if API key is present allows full speed call, else only allows slowed speed call except if browser
                 fullParamString = await ThrottleManager.HandleCall(incomingRequest, fullParamString);
 

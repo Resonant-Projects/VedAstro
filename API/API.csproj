@@ -12,6 +12,9 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 	<ItemGroup>
+		<InternalsVisibleTo Include="LibraryTests" />
+	</ItemGroup>
+	<ItemGroup>
 		<PackageReference Include="Azure.AI.OpenAI" Version="1.0.0-beta.17" />
 		<PackageReference Include="Azure.Communication.Email" Version="1.0.1" />
 		<PackageReference Include="Azure.Data.Tables" Version="12.9.1" />

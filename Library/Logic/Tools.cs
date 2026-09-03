@@ -2175,8 +2175,7 @@ namespace VedAstro.Library
         /// </summary>
         public static string ToUrl(this DateTimeOffset dateTimeOffset)
         {
-
-            var part1 = dateTimeOffset.ToString("HH:mm");
+            var part1 = TimeOfDayToUrl(dateTimeOffset);
             var part2 = dateTimeOffset.ToString("dd/MM/yyyy");
             var part3 = dateTimeOffset.ToString("zzz"); //timezone separate so can clean date time
 
@@ -2188,6 +2187,26 @@ namespace VedAstro.Library
 
             var url = $"/Time/{part1}/{part2}/{part3}";
             return url;
+        }
+
+        /// <summary>
+        /// Formats a clock value for the OpenAPI time segment without discarding
+        /// seconds or fractional seconds. Minute-aligned values retain the legacy
+        /// HH:mm representation.
+        /// </summary>
+        internal static string TimeOfDayToUrl(DateTimeOffset dateTimeOffset)
+        {
+            if (dateTimeOffset.Ticks % TimeSpan.TicksPerMinute == 0)
+            {
+                return dateTimeOffset.ToString("HH:mm", CultureInfo.InvariantCulture);
+            }
+
+            if (dateTimeOffset.Ticks % TimeSpan.TicksPerSecond == 0)
+            {
+                return dateTimeOffset.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+            }
+
+            return dateTimeOffset.ToString("HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture);
         }
 
 

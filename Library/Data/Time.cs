@@ -51,6 +51,19 @@ namespace VedAstro.Library
         public const string DateTimeFormatSeconds = "HH:mm:ss dd/MM/yyyy zzz"; //used in logging
 
         /// <summary>
+        /// HH:mm:ss.fffffff dd/MM/yyyy zzz. Uppercase F accepts and preserves
+        /// one to seven fractional-second digits without adding trailing zeroes.
+        /// </summary>
+        public const string DateTimeFormatFractionalSeconds = "HH:mm:ss.FFFFFFF dd/MM/yyyy zzz";
+
+        private static readonly string[] SupportedDateTimeFormats =
+        {
+            DateTimeFormat,
+            DateTimeFormatSeconds,
+            DateTimeFormatFractionalSeconds
+        };
+
+        /// <summary>
         /// Returns an Empty Time instance meant to be used as null/void filler
         /// for debugging and generating empty dasa svg lines
         /// </summary>
@@ -74,22 +87,16 @@ namespace VedAstro.Library
         /// </summary>
         public Time(string stdDateTimeText, GeoLocation geoLocation)
         {
-            try
+            if (TryParseStd(stdDateTimeText, out var stdDateTime))
             {
-                var stdDateTime = DateTimeOffset.ParseExact(stdDateTimeText, Time.DateTimeFormat, null);
-
                 //store std time
                 _stdTime = stdDateTime;
 
                 //store geolocation for later use
                 _geoLocation = geoLocation;
-
             }
-            catch (Exception e)
+            else
             {
-                //Console.WriteLine(e);
-                //throw e;
-
                 //if can't parse just make empty instance
                 _stdTime = DateTimeOffset.MinValue;
                 _geoLocation = GeoLocation.Empty;
@@ -335,20 +342,16 @@ namespace VedAstro.Library
         }
 
         /// <summary>
-        /// Returns STD time in string HH:mm dd/MM/yyyy zzz
+        /// Returns STD time in the shortest lossless supported format:
+        /// HH:mm, HH:mm:ss, or HH:mm:ss.fffffff, followed by date and offset.
         /// </summary>
         public string GetStdDateTimeOffsetText()
         {
             //format time with formatting info
             //note: only explicit statement of format as below works
-            var stdDateTimeString = _stdTime.ToString("HH:mm dd/MM/yyyy");
-            var stdTimeZoneString = _stdTime.ToString("zzz"); //timezone separate so can clean date time
-
-            //god knows why, in some time zones date comes with "." instead of "/" (despite above formatting)
-            stdDateTimeString = stdDateTimeString.Replace('.', '/');
-
-            //god knows why, in some time zones date comes with "-" instead of "/" (despite above formatting)
-            stdDateTimeString = stdDateTimeString.Replace('-', '/');
+            var stdDateTimeString =
+                $"{Tools.TimeOfDayToUrl(_stdTime)} {_stdTime.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}";
+            var stdTimeZoneString = _stdTime.ToString("zzz", CultureInfo.InvariantCulture); //timezone separate so can clean date time
 
             //recombine
             var final = $"{stdDateTimeString} {stdTimeZoneString}";
@@ -460,17 +463,12 @@ namespace VedAstro.Library
         /// </summary>
         public static bool TryParseStd(string stdDateTimeText, out DateTimeOffset parsed)
         {
-            try
-            {
-                parsed = DateTimeOffset.ParseExact(stdDateTimeText, Time.DateTimeFormat, null);
-                return true;
-            }
-            catch (Exception)
-            {
-                //failure for any reason, return false
-                parsed = new DateTimeOffset();
-                return false;
-            }
+            return DateTimeOffset.TryParseExact(
+                stdDateTimeText,
+                SupportedDateTimeFormats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out parsed);
         }
 
 
@@ -492,8 +490,14 @@ namespace VedAstro.Library
             {
                 var timeString = timeJson["StdTime"].Value<string>();// ?.Value ?? "00:00 01/01/2000 +08:00";
 
-                //know issue to have "." instead of "/" for date separator, so change it here if at all
-                timeString = timeString.Replace('.', '/');
+                //Some older payloads used locale-specific date separators. Normalize
+                //only the date field so a fractional-second decimal point survives.
+                var timeParts = timeString.Split(' ');
+                if (timeParts.Length == 3)
+                {
+                    timeParts[1] = timeParts[1].Replace('.', '/').Replace('-', '/');
+                    timeString = string.Join(' ', timeParts);
+                }
 
                 var locationJson = timeJson["Location"];
                 GeoLocation geoLocation = GeoLocation.FromJson(locationJson);
@@ -582,17 +586,7 @@ namespace VedAstro.Library
         {
             var stringWithSpace = this.GetGeoLocation().Name();
             var locationName = Tools.RemoveWhiteSpace(stringWithSpace);
-
-            //reconstruct into URL pattern
-            //00:00/22/05/2023/+08:00
-            var returnVal = this.GetStdDateTimeOffsetText(); //date time with space
-
-            //replace spacing between to slash, presto done!
-            var formattedTime = returnVal.Replace(" ", "/");
-
-            var finalUrl = $"/Location/{locationName}/Time/{formattedTime}";
-
-            return finalUrl;
+            return $"/Location/{locationName}{_stdTime.ToUrl()}";
         }
 
 
