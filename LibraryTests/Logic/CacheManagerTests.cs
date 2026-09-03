@@ -223,6 +223,28 @@ public class CacheManagerTests
     }
 
     [TestMethod]
+    public void CacheKeyDistinguishesPreciseTimesWithCollidingLowTickBits()
+    {
+        var location = new GeoLocation("Greenwich", 0, 51.4934);
+        var first = new Time(
+            new DateTimeOffset(2000, 1, 1, 12, 0, 0, TimeSpan.Zero),
+            location);
+        var second = new Time(
+            first.GetStdDateTimeOffset().AddTicks(1L << 32),
+            location);
+
+        Assert.AreNotEqual(first, second);
+
+        var cache = new ConcurrentDictionary<CacheKey, object>();
+        cache.TryAdd(new CacheKey("PreciseTime", first), "first");
+        cache.TryAdd(new CacheKey("PreciseTime", second), "second");
+
+        Assert.AreEqual(2, cache.Count);
+        Assert.AreEqual("first", cache[new CacheKey("PreciseTime", first)]);
+        Assert.AreEqual("second", cache[new CacheKey("PreciseTime", second)]);
+    }
+
+    [TestMethod]
     public void CacheRetryFileNamesCannotCollideWithNumberedChunks()
     {
         var buildFileNameMethod = typeof(CacheManager).GetMethod(

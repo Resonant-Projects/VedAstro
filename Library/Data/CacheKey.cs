@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 
 namespace VedAstro.Library
 {
@@ -11,7 +12,7 @@ namespace VedAstro.Library
     public class CacheKey
     {
         public string Function;
-        //public object[] Args;
+        private readonly object[] _arguments;
         private int _ultimateHash;
 
         internal int UltimateHash => _ultimateHash;
@@ -20,7 +21,7 @@ namespace VedAstro.Library
         public CacheKey(string function, params object[] args)
         {
             Function = function;
-            //Args = args;
+            _arguments = args?.ToArray();
 
             //get hashes of all values
             var functionNameHash = Tools.GetStringHashCode(function);
@@ -30,32 +31,37 @@ namespace VedAstro.Library
             _ultimateHash = functionNameHash + allArgumentsHash;
         }
 
+        private CacheKey(string function, int ultimateHash)
+        {
+            Function = function;
+            _ultimateHash = ultimateHash;
+            _arguments = null;
+        }
+
         internal static CacheKey FromHash(string function, int ultimateHash)
         {
-            var cacheKey = new CacheKey(function);
-            cacheKey._ultimateHash = ultimateHash;
-            return cacheKey;
+            return new CacheKey(function, ultimateHash);
         }
 
 
         //PUBLIC METHODS
         public override bool Equals(object value)
         {
-            if (value.GetType() == typeof(CacheKey))
+            if (value is not CacheKey possibleMatch ||
+                !string.Equals(Function, possibleMatch.Function, StringComparison.Ordinal))
             {
-                //cast to cache key
-                var possibleMatch = (CacheKey)value;
-
-                //Check equality
-                bool returnValue = (this.GetHashCode() == possibleMatch.GetHashCode());
-
-                return returnValue;
-            }
-            else
-            {
-                //Return false if value is null
                 return false;
             }
+
+            //Disk cache files historically contain only the deterministic hash.
+            //Live keys retain their arguments so hash collisions cannot alias two
+            //different calls; loaded legacy keys preserve disk compatibility.
+            if (_arguments is null || possibleMatch._arguments is null)
+            {
+                return _ultimateHash == possibleMatch._ultimateHash;
+            }
+
+            return ArgumentsEqual(_arguments, possibleMatch._arguments);
         }
 
         public override int GetHashCode() => _ultimateHash;
@@ -136,6 +142,59 @@ namespace VedAstro.Library
             }
 
             return value.GetHashCode();
+        }
+
+        private static bool ArgumentsEqual(object[] left, object[] right)
+        {
+            if (left.Length != right.Length)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < left.Length; index++)
+            {
+                if (!ValuesEqual(left[index], right[index]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool ValuesEqual(object left, object right)
+        {
+            if (ReferenceEquals(left, right))
+            {
+                return true;
+            }
+
+            if (left is null || right is null)
+            {
+                return false;
+            }
+
+            if (left is Array leftArray && right is Array rightArray)
+            {
+                if (leftArray.Rank != rightArray.Rank)
+                {
+                    return false;
+                }
+
+                for (var dimension = 0; dimension < leftArray.Rank; dimension++)
+                {
+                    if (leftArray.GetLength(dimension) != rightArray.GetLength(dimension))
+                    {
+                        return false;
+                    }
+                }
+
+                return leftArray.Cast<object>()
+                    .Zip(rightArray.Cast<object>(), ValuesEqual)
+                    .All(equal => equal);
+            }
+
+            return left.Equals(right);
         }
     }
 }

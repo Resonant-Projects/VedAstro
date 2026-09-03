@@ -599,22 +599,9 @@ namespace VedAstro.Library
 
         public override bool Equals(object obj)
         {
-            //if type is correct
-            if (obj.GetType() == typeof(Time))
-            {
-                //hard cast inputed value to time
-                Time inputTime = (Time)obj;
-
-                //check equality with hash code
-                return this.GetHashCode() == inputTime.GetHashCode();
-            }
-
-            //not correct type, return not equal
-            else
-            {
-                return false;
-            }
-
+            return obj is Time inputTime &&
+                   _stdTime.EqualsExact(inputTime._stdTime) &&
+                   Equals(_geoLocation, inputTime._geoLocation);
         }
 
         /// <summary>
@@ -622,11 +609,14 @@ namespace VedAstro.Library
         /// </summary>
         public override int GetHashCode()
         {
-            //combine all the hash of the fields
-            var hash1 = (int)_stdTime.Ticks;
-            var hash2 = _geoLocation?.GetHashCode() ?? 0;
-
-            return hash1 + hash2;
+            unchecked
+            {
+                var hash = 17;
+                hash = (hash * 23) + _stdTime.Ticks.GetHashCode();
+                hash = (hash * 23) + _stdTime.Offset.Ticks.GetHashCode();
+                hash = (hash * 23) + (_geoLocation?.GetHashCode() ?? 0);
+                return hash;
+            }
         }
 
         /// <summary>
