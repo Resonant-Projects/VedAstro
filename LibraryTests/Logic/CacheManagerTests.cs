@@ -223,17 +223,21 @@ public class CacheManagerTests
     }
 
     [TestMethod]
+    [DoNotParallelize]
     public void CacheKeyDistinguishesPreciseTimesWithCollidingLowTickBits()
     {
+        var temporaryDirectory = Directory.CreateTempSubdirectory("vedastro-cache-precise-time-");
+        var originalCacheFileName = Syntax.CacheFileName;
         var location = new GeoLocation("Greenwich", 0, 51.4934);
         var first = new Time(
             new DateTimeOffset(2000, 1, 1, 12, 0, 0, TimeSpan.Zero),
             location);
         var second = new Time(
-            first.GetStdDateTimeOffset().AddTicks(1L << 32),
+            first.GetStdDateTimeOffset().AddTicks((1L << 32) + 1),
             location);
 
         Assert.AreNotEqual(first, second);
+        Assert.AreEqual(first.GetHashCode(), second.GetHashCode(), "Test precondition: hashes must collide.");
 
         var cache = new ConcurrentDictionary<CacheKey, object>();
         cache.TryAdd(new CacheKey("PreciseTime", first), "first");
@@ -242,6 +246,35 @@ public class CacheManagerTests
         Assert.AreEqual(2, cache.Count);
         Assert.AreEqual("first", cache[new CacheKey("PreciseTime", first)]);
         Assert.AreEqual("second", cache[new CacheKey("PreciseTime", second)]);
+
+        try
+        {
+            Syntax.CacheFileName = Path.Combine(temporaryDirectory.FullName, "cache");
+            var saveMethod = typeof(CacheManager).GetMethod(
+                "saveCacheInNewFile",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            var deserializeMethod = typeof(CacheManager).GetMethod(
+                "deserializeCache",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.IsNotNull(saveMethod);
+            Assert.IsNotNull(deserializeMethod);
+            saveMethod.Invoke(null, new object[] { "PreciseTime", 1, cache });
+
+            var cacheFile = Directory.GetFiles(temporaryDirectory.FullName).Single();
+            var restoredCache = (ConcurrentDictionary<CacheKey, object>)deserializeMethod.Invoke(
+                null,
+                new object[] { cacheFile })!;
+
+            Assert.AreEqual(2, restoredCache.Count);
+            Assert.AreEqual("first", restoredCache[new CacheKey("PreciseTime", first)]);
+            Assert.AreEqual("second", restoredCache[new CacheKey("PreciseTime", second)]);
+        }
+        finally
+        {
+            Syntax.CacheFileName = originalCacheFileName;
+            temporaryDirectory.Delete(recursive: true);
+        }
     }
 
     [TestMethod]

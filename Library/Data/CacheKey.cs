@@ -1,27 +1,30 @@
 ﻿using System;
-using System.Linq;
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace VedAstro.Library
 {
     /// <summary>
     /// Uniquely identifies a specific call to the method
-    /// It holds the method name and the params used to call the method (only hashes, for performance)
+    /// It holds a deterministic bucket hash plus a collision-safe argument fingerprint.
     /// Note: Use class over struct for performance
     /// </summary>
     [Serializable()]
     public class CacheKey
     {
         public string Function;
-        private readonly object[] _arguments;
-        private int _ultimateHash;
+        private readonly string _argumentFingerprint;
+        private readonly int _ultimateHash;
 
         internal int UltimateHash => _ultimateHash;
+        internal string ArgumentFingerprint => _argumentFingerprint;
 
         //CTOR
         public CacheKey(string function, params object[] args)
         {
             Function = function;
-            _arguments = args?.ToArray();
+            _argumentFingerprint = GetArgumentFingerprint(args);
 
             //get hashes of all values
             var functionNameHash = Tools.GetStringHashCode(function);
@@ -31,16 +34,19 @@ namespace VedAstro.Library
             _ultimateHash = functionNameHash + allArgumentsHash;
         }
 
-        private CacheKey(string function, int ultimateHash)
+        private CacheKey(string function, int ultimateHash, string argumentFingerprint)
         {
             Function = function;
             _ultimateHash = ultimateHash;
-            _arguments = null;
+            _argumentFingerprint = argumentFingerprint;
         }
 
-        internal static CacheKey FromHash(string function, int ultimateHash)
+        internal static CacheKey FromHash(
+            string function,
+            int ultimateHash,
+            string argumentFingerprint)
         {
-            return new CacheKey(function, ultimateHash);
+            return new CacheKey(function, ultimateHash, argumentFingerprint);
         }
 
 
@@ -53,15 +59,11 @@ namespace VedAstro.Library
                 return false;
             }
 
-            //Disk cache files historically contain only the deterministic hash.
-            //Live keys retain their arguments so hash collisions cannot alias two
-            //different calls; loaded legacy keys preserve disk compatibility.
-            if (_arguments is null || possibleMatch._arguments is null)
-            {
-                return _ultimateHash == possibleMatch._ultimateHash;
-            }
-
-            return ArgumentsEqual(_arguments, possibleMatch._arguments);
+            return _ultimateHash == possibleMatch._ultimateHash &&
+                   string.Equals(
+                       _argumentFingerprint,
+                       possibleMatch._argumentFingerprint,
+                       StringComparison.Ordinal);
         }
 
         public override int GetHashCode() => _ultimateHash;
@@ -144,57 +146,89 @@ namespace VedAstro.Library
             return value.GetHashCode();
         }
 
-        private static bool ArgumentsEqual(object[] left, object[] right)
+        private static string GetArgumentFingerprint(object[] arguments)
         {
-            if (left.Length != right.Length)
-            {
-                return false;
-            }
-
-            for (var index = 0; index < left.Length; index++)
-            {
-                if (!ValuesEqual(left[index], right[index]))
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            var canonical = new StringBuilder();
+            AppendValue(canonical, arguments);
+            return Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString())));
         }
 
-        private static bool ValuesEqual(object left, object right)
+        private static void AppendValue(StringBuilder canonical, object value)
         {
-            if (ReferenceEquals(left, right))
+            if (value is null)
             {
-                return true;
+                canonical.Append("N;");
+                return;
             }
 
-            if (left is null || right is null)
-            {
-                return false;
-            }
+            AppendText(
+                canonical,
+                value.GetType().AssemblyQualifiedName ?? value.GetType().FullName ?? string.Empty);
 
-            if (left is Array leftArray && right is Array rightArray)
+            switch (value)
             {
-                if (leftArray.Rank != rightArray.Rank)
-                {
-                    return false;
-                }
-
-                for (var dimension = 0; dimension < leftArray.Rank; dimension++)
-                {
-                    if (leftArray.GetLength(dimension) != rightArray.GetLength(dimension))
+                case string text:
+                    AppendText(canonical, text);
+                    break;
+                case Time time:
+                    var standardTime = time.GetStdDateTimeOffset();
+                    canonical.Append(standardTime.Ticks).Append(';')
+                        .Append(standardTime.Offset.Ticks).Append(';');
+                    AppendValue(canonical, time.GetGeoLocation());
+                    break;
+                case GeoLocation location:
+                    AppendText(canonical, location.Name());
+                    canonical.Append(BitConverter.DoubleToInt64Bits(location.Longitude())).Append(';')
+                        .Append(BitConverter.DoubleToInt64Bits(location.Latitude())).Append(';');
+                    break;
+                case DateTimeOffset dateTimeOffset:
+                    canonical.Append(dateTimeOffset.Ticks).Append(';')
+                        .Append(dateTimeOffset.Offset.Ticks).Append(';');
+                    break;
+                case DateTime dateTime:
+                    canonical.Append(dateTime.Ticks).Append(';')
+                        .Append((int)dateTime.Kind).Append(';');
+                    break;
+                case TimeSpan timeSpan:
+                    canonical.Append(timeSpan.Ticks).Append(';');
+                    break;
+                case double doubleValue:
+                    canonical.Append(BitConverter.DoubleToInt64Bits(doubleValue)).Append(';');
+                    break;
+                case float floatValue:
+                    canonical.Append(BitConverter.SingleToInt32Bits(floatValue)).Append(';');
+                    break;
+                case decimal decimalValue:
+                    foreach (var part in decimal.GetBits(decimalValue))
                     {
-                        return false;
+                        canonical.Append(part).Append(';');
                     }
-                }
-
-                return leftArray.Cast<object>()
-                    .Zip(rightArray.Cast<object>(), ValuesEqual)
-                    .All(equal => equal);
+                    break;
+                case Guid guid:
+                    canonical.Append(guid.ToString("N")).Append(';');
+                    break;
+                case Array array:
+                    canonical.Append(array.Rank).Append(';');
+                    for (var dimension = 0; dimension < array.Rank; dimension++)
+                    {
+                        canonical.Append(array.GetLength(dimension)).Append(';');
+                    }
+                    foreach (var item in array)
+                    {
+                        AppendValue(canonical, item);
+                    }
+                    break;
+                default:
+                    AppendText(canonical, Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty);
+                    canonical.Append(GetStableHashCode(value)).Append(';');
+                    break;
             }
+        }
 
-            return left.Equals(right);
+        private static void AppendText(StringBuilder canonical, string value)
+        {
+            canonical.Append(value.Length).Append(':').Append(value).Append(';');
         }
     }
 }

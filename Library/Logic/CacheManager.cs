@@ -82,7 +82,8 @@ namespace VedAstro.Library
             int Hash,
             string ValueType,
             JsonElement Value,
-            string? TaskResultType = null);
+            string? TaskResultType = null,
+            string? ArgumentFingerprint = null);
 
         private sealed record TimeCacheValue(DateTimeOffset StdTime, GeoLocation Location);
         private sealed record GeoLocationCacheValue(string Name, double Longitude, double Latitude);
@@ -522,7 +523,8 @@ namespace VedAstro.Library
                             cacheItem.Key.UltimateHash,
                             valueType.AssemblyQualifiedName!,
                             serializedValue,
-                            taskResultType?.AssemblyQualifiedName));
+                            taskResultType?.AssemblyQualifiedName,
+                            cacheItem.Key.ArgumentFingerprint));
                     }
 
                     if (skippedEntryCount > 0)
@@ -557,6 +559,13 @@ namespace VedAstro.Library
 
             foreach (var entry in entries)
             {
+                //Pre-fingerprint cache entries cannot be matched collision-safely.
+                //They are disposable derived data, so rebuild them on demand.
+                if (string.IsNullOrWhiteSpace(entry.ArgumentFingerprint))
+                {
+                    continue;
+                }
+
                 var valueType = Type.GetType(entry.ValueType, throwOnError: false);
                 if (valueType == null || !isAllowedCacheType(valueType))
                 {
@@ -592,7 +601,9 @@ namespace VedAstro.Library
                         .Invoke(null, new[] { value })!;
                 }
 
-                cacheData.TryAdd(CacheKey.FromHash(entry.Function, entry.Hash), value);
+                cacheData.TryAdd(
+                    CacheKey.FromHash(entry.Function, entry.Hash, entry.ArgumentFingerprint),
+                    value);
             }
 
             return cacheData;
