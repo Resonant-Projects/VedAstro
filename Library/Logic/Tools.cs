@@ -2176,14 +2176,8 @@ namespace VedAstro.Library
         public static string ToUrl(this DateTimeOffset dateTimeOffset)
         {
             var part1 = TimeOfDayToUrl(dateTimeOffset);
-            var part2 = dateTimeOffset.ToString("dd/MM/yyyy");
-            var part3 = dateTimeOffset.ToString("zzz"); //timezone separate so can clean date time
-
-            //god knows why, in some time zones date comes with "." instead of "/" (despite above formatting)
-            part2 = part2.Replace('.', '/');
-
-            //god knows why, in some time zones date comes with "-" instead of "/" (despite above formatting)
-            part2 = part2.Replace('-', '/');
+            var part2 = dateTimeOffset.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+            var part3 = dateTimeOffset.ToString("zzz", CultureInfo.InvariantCulture);
 
             var url = $"/Time/{part1}/{part2}/{part3}";
             return url;
@@ -2196,12 +2190,13 @@ namespace VedAstro.Library
         /// </summary>
         internal static string TimeOfDayToUrl(DateTimeOffset dateTimeOffset)
         {
-            if (dateTimeOffset.Ticks % TimeSpan.TicksPerMinute == 0)
+            var timeOfDayTicks = dateTimeOffset.TimeOfDay.Ticks;
+            if (timeOfDayTicks % TimeSpan.TicksPerMinute == 0)
             {
                 return dateTimeOffset.ToString("HH:mm", CultureInfo.InvariantCulture);
             }
 
-            if (dateTimeOffset.Ticks % TimeSpan.TicksPerSecond == 0)
+            if (timeOfDayTicks % TimeSpan.TicksPerSecond == 0)
             {
                 return dateTimeOffset.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
             }
