@@ -1570,16 +1570,16 @@ namespace VedAstro.Library
             // The number of units of compatibility assigned to this Kuta is 3 in case
             // agreement is found.
 
-            //get ruling sign
-            var maleRuleSign = Calculate.PlanetRasiD1Sign(PlanetName.Moon, male.BirthTime).GetSignName();
-            var femaleRuleSign = Calculate.PlanetRasiD1Sign(PlanetName.Moon, female.BirthTime).GetSignName();
+            //Dina Kuta counts constellations (nakshatras), not signs
+            var maleConstellation = Calculate.MoonConstellation(male.BirthTime);
+            var femaleConstellation = Calculate.MoonConstellation(female.BirthTime);
 
             //show user
-            prediction.MaleInfo = maleRuleSign.ToString();
-            prediction.FemaleInfo = femaleRuleSign.ToString();
+            prediction.MaleInfo = maleConstellation.GetConstellationName().ToString();
+            prediction.FemaleInfo = femaleConstellation.GetConstellationName().ToString();
 
-            //count from female to male
-            var count = Calculate.CountFromSignToSign(femaleRuleSign, maleRuleSign);
+            //count from female to male, inclusive
+            var count = Calculate.CountFromConstellationToConstellation(femaleConstellation, maleConstellation);
 
             //divide by 9 and get the remainder, done via modulus
             var remainder = count % 9;

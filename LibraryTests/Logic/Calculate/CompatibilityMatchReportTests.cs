@@ -66,4 +66,41 @@ public class CompatibilityMatchReportTests
         Assert.AreEqual(EventNature.Good, grahaMaitram.Nature, label);
         Assert.AreEqual(EventNature.Neutral, lagnaAndHouse7Good.Nature, label);
     }
+
+    [DataTestMethod]
+    [DataRow(
+        "Pair 3 New York-Denver",
+        "12:00 01/12/1985 -05:00", -74.006, 40.7128,
+        "03:20 09/04/1987 -06:00", -104.9903, 39.7392)]
+    [DataRow(
+        "Pair 5 Bengaluru-Kiritimati",
+        "00:05 29/02/2000 +05:30", 77.5946, 12.9716,
+        "21:40 04/07/2001 +14:00", -157.4278, 1.8721)]
+    public void DinaKutaCountsConstellationsNotSigns(
+        string label,
+        string maleTimestamp,
+        double maleLongitude,
+        double maleLatitude,
+        string femaleTimestamp,
+        double femaleLongitude,
+        double femaleLatitude)
+    {
+        var maleTime = new Time(maleTimestamp, new GeoLocation($"{label} male", maleLongitude, maleLatitude));
+        var femaleTime = new Time(femaleTimestamp, new GeoLocation($"{label} female", femaleLongitude, femaleLatitude));
+
+        var report = Calculate.MatchReport(maleTime, femaleTime);
+        var dinaKuta = report.PredictionList.Single(prediction => prediction.Name == MatchPredictionName.DinaKuta);
+
+        var maleConstellation = Calculate.MoonConstellation(maleTime);
+        var femaleConstellation = Calculate.MoonConstellation(femaleTime);
+        var expectedRemainder = Calculate.CountFromConstellationToConstellation(femaleConstellation, maleConstellation) % 9;
+        var expectedNature = expectedRemainder is 0 or 2 or 4 or 6 or 8 ? EventNature.Good : EventNature.Bad;
+
+        // Before the fix MaleInfo/FemaleInfo are sign names and the remainder comes from a 1-12 sign count.
+        Assert.AreEqual(maleConstellation.GetConstellationName().ToString(), dinaKuta.MaleInfo, label);
+        Assert.AreEqual(femaleConstellation.GetConstellationName().ToString(), dinaKuta.FemaleInfo, label);
+        Assert.IsFalse(Enum.TryParse<ZodiacName>(dinaKuta.MaleInfo, out _), $"{label}; MaleInfo is a sign name");
+        Assert.AreEqual($"remainder is {expectedRemainder}", dinaKuta.Info, label);
+        Assert.AreEqual(expectedNature, dinaKuta.Nature, label);
+    }
 }
