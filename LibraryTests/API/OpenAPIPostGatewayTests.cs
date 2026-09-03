@@ -52,6 +52,26 @@ public class OpenAPIPostGatewayTests
         Assert.IsNotNull(envelope["Payload"]?[calculatorName]);
     }
 
+    [TestMethod]
+    public async Task PolarDaySunriseFailsWithAClearMessageInsteadOfAnUnrepresentableDateTime()
+    {
+        var calculatorName = "SunriseTime";
+        var parameterPath = "Location/69.65,18.95/Time/02:00/21/06/2026/+02:00/Ayanamsa/LAHIRI";
+        var postRequest = TestHttpRequestData.Create(
+            "POST",
+            new Uri("http://localhost:7071/api/Calculate/" + calculatorName),
+            PostBody(parameterPath));
+
+        var postResponse = await OpenAPI.CalculatePost(postRequest, calculatorName);
+        var envelope = JObject.Parse(await ResponseBody(postResponse));
+
+        Assert.AreEqual("Fail", envelope.Value<string>("Status"));
+        var payload = envelope.Value<string>("Payload") ?? string.Empty;
+        StringAssert.Contains(payload, "No sunrise");
+        StringAssert.Contains(payload, "polar day");
+        Assert.IsFalse(payload.Contains("un-representable", StringComparison.OrdinalIgnoreCase), payload);
+    }
+
     private static string PostBody(string parameterPath)
     {
         var segments = parameterPath.Split('/');

@@ -1951,6 +1951,9 @@ namespace VedAstro.Library
                 using SwissEph ephemeris = EphemerisFactory.New();
                 int ret = ephemeris.swe_rise_trans(julianLmtUtcTime, planet, "", iflag, options, geopos, atpress, attemp, ref riseTimeRaw, ref errorMsg);
 
+                //polar day/night: the Sun never crosses the horizon, so there is no sunrise to convert
+                ThrowIfSunDoesNotCrossHorizon(ret, errorMsg, ephemeris, julianLmtUtcTime, time.GetGeoLocation(), lmtAt12Am, isSunrise: true);
+
 
                 //2. Convert raw sun rise time (julian lmt utc) to normal time (std)
 
@@ -2007,6 +2010,9 @@ namespace VedAstro.Library
                 using SwissEph ephemeris = EphemerisFactory.New();
                 int ret = ephemeris.swe_rise_trans(julianLmtUtcTime, planet, "", iflag, options, geopos, atpress, attemp, ref setTimeRaw, ref errorMsg);
 
+                //polar day/night: the Sun never crosses the horizon, so there is no sunset to convert
+                ThrowIfSunDoesNotCrossHorizon(ret, errorMsg, ephemeris, julianLmtUtcTime, time.GetGeoLocation(), lmtAt12Am, isSunrise: false);
+
 
                 //2. Convert raw sun set time (julian lmt utc) to normal time (std)
 
@@ -2020,6 +2026,42 @@ namespace VedAstro.Library
 
             }
 
+        }
+
+        /// <summary>
+        /// Swiss Ephemeris swe_rise_trans returns -2 when the body does not cross the horizon
+        /// within the searched day (polar day or polar night) and leaves the result untouched at 0.
+        /// Converting that 0 (4713 BC) blew up with "un-representable DateTime", so answer with a
+        /// clear domain error instead. Any other negative code is a genuine ephemeris failure.
+        /// </summary>
+        private static void ThrowIfSunDoesNotCrossHorizon(int returnCode, string errorMsg, SwissEph ephemeris,
+            double julianDayUt, GeoLocation location, DateTime localDate, bool isSunrise)
+        {
+            if (returnCode >= 0) { return; }
+
+            var eventName = isSunrise ? "sunrise" : "sunset";
+            var latitude = $"{Math.Abs(location.Latitude()):0.####}{(location.Latitude() < 0 ? "S" : "N")}";
+            var longitude = $"{Math.Abs(location.Longitude()):0.####}{(location.Longitude() < 0 ? "W" : "E")}";
+            var placeAndDate = $"at {location.Name()} ({latitude}, {longitude}) on {localDate:dd/MM/yyyy}";
+
+            if (returnCode != -2)
+            {
+                throw new InvalidOperationException($"Could not calculate {eventName} {placeAndDate}: Swiss Ephemeris returned {returnCode} ({errorMsg})");
+            }
+
+            //no horizon crossing all day: the Sun is either up all day or down all day,
+            //decided by whether its declination points to the same hemisphere as the observer
+            double[] equatorial = new double[6];
+            var declinationError = "";
+            ephemeris.swe_calc_ut(julianDayUt, SwissEph.SE_SUN, SwissEph.SEFLG_SWIEPH | SwissEph.SEFLG_EQUATORIAL, equatorial, ref declinationError);
+            var declination = equatorial[1];
+            var isPolarDay = Math.Sign(declination) == Math.Sign(location.Latitude());
+
+            var explanation = isPolarDay
+                ? "the Sun stays above the horizon all day (polar day)"
+                : "the Sun stays below the horizon all day (polar night)";
+
+            throw new PolarSunException($"No {eventName} {placeAndDate}: {explanation}.", isPolarDay);
         }
 
         /// <summary>
