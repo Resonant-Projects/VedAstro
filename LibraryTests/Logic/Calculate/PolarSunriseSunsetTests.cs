@@ -14,11 +14,15 @@ public class PolarSunriseSunsetTests
 {
     private static readonly GeoLocation Tromso = new("Tromso, Norway", 18.95, 69.65);
 
+    private static readonly GeoLocation McMurdo = new("McMurdo Station, Antarctica", 166.6863, -77.8419);
+
     private static readonly Time PolarDay = new("02:00 21/06/2026 +02:00", Tromso);
 
     private static readonly Time PolarNight = new("02:00 21/12/2026 +01:00", Tromso);
 
     private static readonly Time Equinox = new("12:00 21/03/2026 +01:00", Tromso);
+
+    private static readonly Time SouthernPolarDay = new("12:00 21/12/2026 +13:00", McMurdo);
 
     [TestInitialize]
     public void ResetCalculationSettings()
@@ -57,6 +61,16 @@ public class PolarSunriseSunsetTests
         StringAssert.Contains(exception.Message, "No sunrise");
         StringAssert.Contains(exception.Message, "21/12/2026");
         StringAssert.Contains(exception.Message, "polar night");
+    }
+
+    [TestMethod]
+    public void SunriseTimeReportsSouthernHemispherePolarDay()
+    {
+        var exception = Assert.ThrowsException<PolarSunException>(() => Calculate.SunriseTime(SouthernPolarDay));
+
+        Assert.IsTrue(exception.IsPolarDay);
+        StringAssert.Contains(exception.Message, "McMurdo Station, Antarctica");
+        StringAssert.Contains(exception.Message, "polar day");
     }
 
     [TestMethod]
