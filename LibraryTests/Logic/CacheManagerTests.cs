@@ -223,6 +223,16 @@ public class CacheManagerTests
     }
 
     [TestMethod]
+    public void CacheKeyHandlesNullLocationName()
+    {
+        var location = new GeoLocation(null, 0, 0);
+
+        Assert.AreEqual(
+            new CacheKey("NullableLocation", location),
+            new CacheKey("NullableLocation", location));
+    }
+
+    [TestMethod]
     [DoNotParallelize]
     public void CacheKeyDistinguishesPreciseTimesWithCollidingLowTickBits()
     {

@@ -228,6 +228,12 @@ namespace VedAstro.Library
 
         private static void AppendText(StringBuilder canonical, string value)
         {
+            if (value is null)
+            {
+                canonical.Append("-1:;");
+                return;
+            }
+
             canonical.Append(value.Length).Append(':').Append(value).Append(';');
         }
     }
