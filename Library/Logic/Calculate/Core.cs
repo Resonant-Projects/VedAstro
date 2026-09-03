@@ -1952,7 +1952,8 @@ namespace VedAstro.Library
                 int ret = ephemeris.swe_rise_trans(julianLmtUtcTime, planet, "", iflag, options, geopos, atpress, attemp, ref riseTimeRaw, ref errorMsg);
 
                 //polar day/night: the Sun never crosses the horizon, so there is no sunrise to convert
-                ThrowIfSunDoesNotCrossHorizon(ret, errorMsg, ephemeris, julianLmtUtcTime, time.GetGeoLocation(), lmtAt12Am, isSunrise: true);
+                ThrowIfSunDoesNotCrossHorizon(ret, errorMsg, ephemeris, iflag, options, geopos,
+                    julianLmtUtcTime, time.GetGeoLocation(), lmtAt12Am, isSunrise: true);
 
 
                 //2. Convert raw sun rise time (julian lmt utc) to normal time (std)
@@ -2011,7 +2012,8 @@ namespace VedAstro.Library
                 int ret = ephemeris.swe_rise_trans(julianLmtUtcTime, planet, "", iflag, options, geopos, atpress, attemp, ref setTimeRaw, ref errorMsg);
 
                 //polar day/night: the Sun never crosses the horizon, so there is no sunset to convert
-                ThrowIfSunDoesNotCrossHorizon(ret, errorMsg, ephemeris, julianLmtUtcTime, time.GetGeoLocation(), lmtAt12Am, isSunrise: false);
+                ThrowIfSunDoesNotCrossHorizon(ret, errorMsg, ephemeris, iflag, options, geopos,
+                    julianLmtUtcTime, time.GetGeoLocation(), lmtAt12Am, isSunrise: false);
 
 
                 //2. Convert raw sun set time (julian lmt utc) to normal time (std)
@@ -2029,13 +2031,14 @@ namespace VedAstro.Library
         }
 
         /// <summary>
-        /// Swiss Ephemeris swe_rise_trans returns -2 when the body does not cross the horizon
-        /// within the searched day (polar day or polar night) and leaves the result untouched at 0.
-        /// Converting that 0 (4713 BC) blew up with "un-representable DateTime", so answer with a
-        /// clear domain error instead. Any other negative code is a genuine ephemeris failure.
+        /// Swiss Ephemeris swe_rise_trans returns -2 when the requested crossing is not found in its
+        /// search window and leaves the result untouched at 0. Converting that 0 (4713 BC) blew up
+        /// with "un-representable DateTime", so answer with a clear domain error instead. Only call
+        /// the state polar day/night when neither sunrise nor sunset is found in the same window.
         /// </summary>
         private static void ThrowIfSunDoesNotCrossHorizon(int returnCode, string errorMsg, SwissEph ephemeris,
-            double julianDayUt, GeoLocation location, DateTime localDate, bool isSunrise)
+            int ephemerisFlags, int riseSetOptions, double[] geopos, double julianDayUt,
+            GeoLocation location, DateTime localDate, bool isSunrise)
         {
             if (returnCode >= 0) { return; }
 
@@ -2049,11 +2052,40 @@ namespace VedAstro.Library
                 throw new InvalidOperationException($"Could not calculate {eventName} {placeAndDate}: Swiss Ephemeris returned {returnCode} ({errorMsg})");
             }
 
-            //no horizon crossing all day: the Sun is either up all day or down all day,
-            //decided by whether its declination points to the same hemisphere as the observer
+            //A missing requested event alone does not prove an all-day polar state. Near the start
+            //or end of a polar season, one crossing can occur in the search window without the other.
+            var complementaryEventName = isSunrise ? "sunset" : "sunrise";
+            var complementaryEvent = isSunrise ? SwissEph.SE_CALC_SET : SwissEph.SE_CALC_RISE;
+            var sharedOptions = riseSetOptions & ~(SwissEph.SE_CALC_RISE | SwissEph.SE_CALC_SET);
+            var complementaryTime = 0.0;
+            var complementaryError = "";
+            var complementaryResult = ephemeris.swe_rise_trans(julianDayUt, SwissEph.SE_SUN, "",
+                ephemerisFlags, sharedOptions | complementaryEvent, geopos, 0.0, 0.0,
+                ref complementaryTime, ref complementaryError);
+
+            if (complementaryResult >= 0)
+            {
+                throw new InvalidOperationException(
+                    $"No {eventName} {placeAndDate}: the crossing was not found in the calculation window, although {complementaryEventName} was found.");
+            }
+
+            if (complementaryResult != -2)
+            {
+                throw new InvalidOperationException(
+                    $"Could not determine why {eventName} is absent {placeAndDate}: Swiss Ephemeris returned {complementaryResult} while checking {complementaryEventName} ({complementaryError})");
+            }
+
+            //Neither crossing occurs in the search window: the Sun remains on one side of the
+            //horizon. Its declination hemisphere distinguishes polar day from polar night.
             double[] equatorial = new double[6];
             var declinationError = "";
-            ephemeris.swe_calc_ut(julianDayUt, SwissEph.SE_SUN, SwissEph.SEFLG_SWIEPH | SwissEph.SEFLG_EQUATORIAL, equatorial, ref declinationError);
+            var declinationResult = ephemeris.swe_calc_ut(julianDayUt, SwissEph.SE_SUN,
+                SwissEph.SEFLG_SWIEPH | SwissEph.SEFLG_EQUATORIAL, equatorial, ref declinationError);
+            if (declinationResult < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Could not classify the missing {eventName} {placeAndDate}: Swiss Ephemeris could not calculate solar declination ({declinationError})");
+            }
             var declination = equatorial[1];
             var isPolarDay = Math.Sign(declination) == Math.Sign(location.Latitude());
 

@@ -80,4 +80,17 @@ public class PolarSunriseSunsetTests
         Assert.IsTrue(sunrise.Hour is >= 5 and <= 7, $"sunrise was {sunrise}");
         Assert.IsTrue(sunset.Hour is >= 17 and <= 19, $"sunset was {sunset}");
     }
+
+    [TestMethod]
+    public void PolarSeasonTransitionDoesNotMislabelOneMissingCrossingAsAllDayPolarState()
+    {
+        var transitionDay = new Time("02:00 22/05/2026 +02:00", Tromso);
+
+        var sunrise = Calculate.SunriseTime(transitionDay).GetStdDateTimeOffset();
+        var exception = Assert.ThrowsException<InvalidOperationException>(() => Calculate.SunsetTime(transitionDay));
+
+        Assert.AreEqual(new DateTime(2026, 5, 22), sunrise.Date);
+        StringAssert.Contains(exception.Message, "No sunset");
+        StringAssert.Contains(exception.Message, "although sunrise was found");
+    }
 }
