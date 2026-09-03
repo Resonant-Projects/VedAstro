@@ -15,14 +15,34 @@ namespace API
         private const string CalculatePostRoute = $"{nameof(Calculate)}/{{calculatorName}}";
 
         internal readonly record struct CalculatorWarmupResult(int PlanetCount, string Ascendant);
-        private static readonly Lazy<Task<CalculatorWarmupResult>> CalculatorWarmup = new(
-            () => Task.Run(WarmUpCalculatorGateway),
-            LazyThreadSafetyMode.ExecutionAndPublication);
+        private static readonly object CalculatorWarmupLock = new();
+        private static Task<CalculatorWarmupResult>? CalculatorWarmupTask;
 
-        internal static Task<CalculatorWarmupResult> StartCalculatorWarmup() => CalculatorWarmup.Value;
+        internal static Task<CalculatorWarmupResult> StartCalculatorWarmup()
+        {
+            lock (CalculatorWarmupLock)
+            {
+                if (CalculatorWarmupTask is null ||
+                    CalculatorWarmupTask.IsFaulted ||
+                    CalculatorWarmupTask.IsCanceled)
+                {
+                    CalculatorWarmupTask = Task.Run(WarmUpCalculatorGateway);
+                }
 
-        internal static bool IsCalculatorReady =>
-            CalculatorWarmup.IsValueCreated && CalculatorWarmup.Value.IsCompletedSuccessfully;
+                return CalculatorWarmupTask;
+            }
+        }
+
+        internal static bool IsCalculatorReady
+        {
+            get
+            {
+                lock (CalculatorWarmupLock)
+                {
+                    return CalculatorWarmupTask?.IsCompletedSuccessfully ?? false;
+                }
+            }
+        }
 
         /// <summary>
         /// Exercises the same parser, reflection dispatcher, All expansion, cache,
