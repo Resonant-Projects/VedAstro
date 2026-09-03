@@ -10,9 +10,10 @@ namespace API
     public static class OpenAPI
     {
 
-        //.../Calculate/Karana/Location/Singapore/Time/23:59/31/12/2000/+08:00
-        private const string CalculateRoute = $"{nameof(Calculate)}/{{calculatorName}}/{{*fullParamString}}"; //* that captures the rest of the URL path
         private const string CalculatePostRoute = $"{nameof(Calculate)}/{{calculatorName}}";
+        private const string CorrelationHeaderName = "X-Request-Id";
+        private static readonly System.Text.RegularExpressions.Regex SafeCorrelationId =
+            new("^[A-Za-z0-9-]{8,64}$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
         internal readonly record struct CalculatorWarmupResult(int PlanetCount, string Ascendant);
         private static readonly object CalculatorWarmupLock = new();
@@ -111,40 +112,41 @@ namespace API
         }
 
         /// <summary>
-        /// Main Open API method to handle all calls
-        /// /.../Calculator/DistanceBetweenPlanets/PlanetName/Sun/PlanetName/Moon/Location/Singapore/Time/23:59/31/12/2000/+08:00
-        /// </summary>
-        [Function(nameof(Calculate))]
-        public static async Task<HttpResponseData> Calculate([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = CalculateRoute)] HttpRequestData incomingRequest,
-        string calculatorName,
-        string fullParamString
-        )
-        {
-            return await CalculateFromParameterPath(incomingRequest, calculatorName, fullParamString);
-        }
-
-        /// <summary>
-        /// Fixed-path calculator gateway. Parameter values stay in the JSON body
-        /// and are adapted to the established path-segment parser.
+        /// Fixed-path calculator gateway. Parameter values stay in the JSON body and are adapted to the established
+        /// path-segment parser. This is the only calculator trigger; the path-encoded GET form was retired because
+        /// URL paths reach request logs.
         /// </summary>
         [Function(nameof(CalculatePost))]
         public static async Task<HttpResponseData> CalculatePost(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = CalculatePostRoute)] HttpRequestData incomingRequest,
             string calculatorName)
         {
+            HttpResponseData response;
             try
             {
                 var fullParamString = await ParameterPathFromPostBody(incomingRequest);
-                return await CalculateFromParameterPath(incomingRequest, calculatorName, fullParamString);
+                response = await CalculateFromParameterPath(incomingRequest, calculatorName, fullParamString);
             }
             catch (Exception e)
             {
                 APILogger.Error(e, incomingRequest);
-                return APITools.FailMessageJson(APITools.GetInnermostExceptionMessage(e), incomingRequest);
+                response = APITools.FailMessageJson(APITools.GetInnermostExceptionMessage(e), incomingRequest);
             }
+
+            // calculatorName is a reflection-validated name, never natal data; fullParamString must never appear here.
+            Console.WriteLine(
+                $"calculate-post calculator={calculatorName} request_id={CorrelationIdFor(incomingRequest)} status={(int)response.StatusCode}");
+            return response;
         }
 
-        private static async Task<HttpResponseData> CalculateFromParameterPath(
+        private static string CorrelationIdFor(HttpRequestData request)
+        {
+            if (!request.Headers.TryGetValues(CorrelationHeaderName, out var values)) return "none";
+            var candidate = values.FirstOrDefault();
+            return candidate is not null && SafeCorrelationId.IsMatch(candidate) ? candidate : "invalid";
+        }
+
+        internal static async Task<HttpResponseData> CalculateFromParameterPath(
             HttpRequestData incomingRequest,
             string calculatorName,
             string fullParamString)

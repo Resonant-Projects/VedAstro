@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Security.Claims;
 using System.Text;
 using API;
@@ -14,6 +15,68 @@ namespace VedAstro.Library.Tests;
 [TestClass]
 public class OpenAPIPostGatewayTests
 {
+    [TestMethod]
+    public void TheGetCalculatorTriggerNoLongerExists()
+    {
+        var getTrigger = typeof(OpenAPI).GetMethod("Calculate", BindingFlags.Public | BindingFlags.Static);
+        Assert.IsNull(getTrigger, "GET /api/Calculate/{calculatorName}/{*fullParamString} must not be registered");
+
+        var postTrigger = typeof(OpenAPI).GetMethod(nameof(OpenAPI.CalculatePost), BindingFlags.Public | BindingFlags.Static);
+        Assert.IsNotNull(postTrigger);
+    }
+
+    [TestMethod]
+    public async Task PostLogsCalculatorNameAndSafeCorrelationIdOnly()
+    {
+        var parameterPath = "Location/28.6139,77.2090/Time/12:00/01/01/1990/+05:30/Ayanamsa/LAHIRI";
+        var request = TestHttpRequestData.Create(
+            "POST",
+            new Uri("http://localhost:7071/api/Calculate/LagnaSignName"),
+            PostBody(parameterPath));
+        request.Headers.Add("X-Request-Id", "audit-7f3c2a9b");
+        var captured = new StringWriter();
+        var original = Console.Out;
+        Console.SetOut(captured);
+        try
+        {
+            await OpenAPI.CalculatePost(request, "LagnaSignName");
+        }
+        finally
+        {
+            Console.SetOut(original);
+        }
+
+        var log = captured.ToString();
+        StringAssert.Contains(log, "calculate-post calculator=LagnaSignName request_id=audit-7f3c2a9b status=200");
+        Assert.IsFalse(log.Contains("28.6139"), log);
+        Assert.IsFalse(log.Contains("1990"), log);
+    }
+
+    [TestMethod]
+    public async Task PostRejectsAnUnsafeCorrelationIdWithoutEchoingIt()
+    {
+        var parameterPath = "Location/28.6139,77.2090/Time/12:00/01/01/1990/+05:30/Ayanamsa/LAHIRI";
+        var request = TestHttpRequestData.Create(
+            "POST",
+            new Uri("http://localhost:7071/api/Calculate/LagnaSignName"),
+            PostBody(parameterPath));
+        request.Headers.Add("X-Request-Id", "not safe/../<script>");
+        var captured = new StringWriter();
+        var original = Console.Out;
+        Console.SetOut(captured);
+        try
+        {
+            await OpenAPI.CalculatePost(request, "LagnaSignName");
+        }
+        finally
+        {
+            Console.SetOut(original);
+        }
+
+        StringAssert.Contains(captured.ToString(), "request_id=invalid");
+        Assert.IsFalse(captured.ToString().Contains("<script>"));
+    }
+
     [TestMethod]
     [DoNotParallelize]
     public async Task ReadinessWarmupCompletesTheProviderCalculationPath()
@@ -47,7 +110,7 @@ public class OpenAPIPostGatewayTests
             new Uri(baseUrl + calculatorName),
             PostBody(parameterPath));
 
-        var getResponse = await OpenAPI.Calculate(getRequest, calculatorName, parameterPath);
+        var getResponse = await OpenAPI.CalculateFromParameterPath(getRequest, calculatorName, parameterPath);
         var postResponse = await OpenAPI.CalculatePost(postRequest, calculatorName);
         var getBody = await ResponseBody(getResponse);
         var postBody = await ResponseBody(postResponse);
@@ -82,7 +145,7 @@ public class OpenAPIPostGatewayTests
         var postResponse = await OpenAPI.CalculatePost(
             postRequest,
             "PlanetNirayanaLongitude");
-        var getResponse = await OpenAPI.Calculate(
+        var getResponse = await OpenAPI.CalculateFromParameterPath(
             getRequest,
             "PlanetNirayanaLongitude",
             parameterPath);
