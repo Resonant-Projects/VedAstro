@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Security.Claims;
 using System.Text;
 using API;
@@ -14,6 +15,74 @@ namespace VedAstro.Library.Tests;
 [TestClass]
 public class OpenAPIPostGatewayTests
 {
+    [TestMethod]
+    public void TheGetCalculatorTriggerNoLongerExists()
+    {
+        var getTrigger = typeof(OpenAPI).GetMethod("Calculate", BindingFlags.Public | BindingFlags.Static);
+        Assert.IsNull(getTrigger, "GET /api/Calculate/{calculatorName}/{*fullParamString} must not be registered");
+
+        var postTrigger = typeof(OpenAPI).GetMethod(nameof(OpenAPI.CalculatePost), BindingFlags.Public | BindingFlags.Static);
+        Assert.IsNotNull(postTrigger);
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task PostLogsCalculatorNameAndSafeCorrelationIdOnly()
+    {
+        var parameterPath = "Location/28.6139,77.2090/Time/12:00/01/01/1990/+05:30/Ayanamsa/LAHIRI";
+        var request = TestHttpRequestData.Create(
+            "POST",
+            new Uri("http://localhost:7071/api/Calculate/LagnaSignName"),
+            PostBody(parameterPath));
+        request.Headers.Add("X-Request-Id", "audit-7f3c2a9b");
+
+        var log = await CaptureConsoleAsync(() => OpenAPI.CalculatePost(request, "LagnaSignName"));
+
+        StringAssert.Contains(log, "calculate-post calculator=LagnaSignName request_id=audit-7f3c2a9b status=200 outcome=Pass");
+        Assert.IsFalse(log.Contains("28.6139"), log);
+        Assert.IsFalse(log.Contains("1990"), log);
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task PostLogsAFailOutcomeWithoutNatalDataWhenTheCalculatorIsUnknown()
+    {
+        var parameterPath = "Location/28.6139,77.2090/Time/12:00/01/01/1990/+05:30/Ayanamsa/LAHIRI";
+        var request = TestHttpRequestData.Create(
+            "POST",
+            new Uri("http://localhost:7071/api/Calculate/NotACalculator"),
+            PostBody(parameterPath));
+        request.Headers.Add("X-Request-Id", "audit-7f3c2a9b");
+
+        HttpResponseData? response = null;
+        var log = await CaptureConsoleAsync(async () =>
+            response = await OpenAPI.CalculatePost(request, "NotACalculator"));
+
+        Assert.IsNotNull(response);
+        Assert.AreEqual("Fail", JObject.Parse(await ResponseBody(response!)).Value<string>("Status"));
+        StringAssert.Contains(log, "calculate-post calculator=NotACalculator request_id=audit-7f3c2a9b status=200 outcome=Fail");
+        Assert.IsFalse(log.Contains("28.6139"), log);
+        Assert.IsFalse(log.Contains("1990"), log);
+        Assert.IsFalse(log.Contains("77.2090"), log);
+    }
+
+    [TestMethod]
+    [DoNotParallelize]
+    public async Task PostRejectsAnUnsafeCorrelationIdWithoutEchoingIt()
+    {
+        var parameterPath = "Location/28.6139,77.2090/Time/12:00/01/01/1990/+05:30/Ayanamsa/LAHIRI";
+        var request = TestHttpRequestData.Create(
+            "POST",
+            new Uri("http://localhost:7071/api/Calculate/LagnaSignName"),
+            PostBody(parameterPath));
+        request.Headers.Add("X-Request-Id", "not safe/../<script>");
+
+        var log = await CaptureConsoleAsync(() => OpenAPI.CalculatePost(request, "LagnaSignName"));
+
+        StringAssert.Contains(log, "request_id=invalid");
+        Assert.IsFalse(log.Contains("<script>"));
+    }
+
     [TestMethod]
     [DoNotParallelize]
     public async Task ReadinessWarmupCompletesTheProviderCalculationPath()
@@ -47,7 +116,7 @@ public class OpenAPIPostGatewayTests
             new Uri(baseUrl + calculatorName),
             PostBody(parameterPath));
 
-        var getResponse = await OpenAPI.Calculate(getRequest, calculatorName, parameterPath);
+        var getResponse = await OpenAPI.CalculateFromParameterPath(getRequest, calculatorName, parameterPath);
         var postResponse = await OpenAPI.CalculatePost(postRequest, calculatorName);
         var getBody = await ResponseBody(getResponse);
         var postBody = await ResponseBody(postResponse);
@@ -82,7 +151,7 @@ public class OpenAPIPostGatewayTests
         var postResponse = await OpenAPI.CalculatePost(
             postRequest,
             "PlanetNirayanaLongitude");
-        var getResponse = await OpenAPI.Calculate(
+        var getResponse = await OpenAPI.CalculateFromParameterPath(
             getRequest,
             "PlanetNirayanaLongitude",
             parameterPath);
@@ -123,6 +192,27 @@ public class OpenAPIPostGatewayTests
         StringAssert.Contains(payload, "No sunrise");
         StringAssert.Contains(payload, "polar day");
         Assert.IsFalse(payload.Contains("un-representable", StringComparison.OrdinalIgnoreCase), payload);
+    }
+
+    /// <summary>
+    /// Console.Out is process global, so every test that uses this helper must also be
+    /// marked [DoNotParallelize].
+    /// </summary>
+    private static async Task<string> CaptureConsoleAsync(Func<Task> action)
+    {
+        var captured = new StringWriter();
+        var original = Console.Out;
+        Console.SetOut(captured);
+        try
+        {
+            await action();
+        }
+        finally
+        {
+            Console.SetOut(original);
+        }
+
+        return captured.ToString();
     }
 
     private static string PostBody(string parameterPath)
