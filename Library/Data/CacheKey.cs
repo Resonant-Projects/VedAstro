@@ -13,7 +13,7 @@ namespace VedAstro.Library
     [Serializable()]
     public class CacheKey
     {
-        public string Function;
+        public readonly string Function;
         private readonly string _argumentFingerprint;
         private readonly int _ultimateHash;
 
