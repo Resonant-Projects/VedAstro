@@ -26,6 +26,40 @@ public class OpenAPIPostGatewayTests
     }
 
     [TestMethod]
+    public void NoUnprefixedCatchAllRouteAndNoWildcardUnderCalculate()
+    {
+        var httpTriggers = typeof(OpenAPI).Assembly
+            .GetTypes()
+            .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
+            .Where(method => method.GetCustomAttribute<FunctionAttribute>() is not null)
+            .SelectMany(method => method.GetParameters()
+                .SelectMany(parameter => parameter.GetCustomAttributes<HttpTriggerAttribute>())
+                .Select(trigger => new { Method = method, Trigger = trigger }))
+            .ToList();
+
+        var unprefixedCatchAllTriggers = httpTriggers
+            .Where(item => item.Trigger.Route?.StartsWith("{*", StringComparison.Ordinal) == true)
+            .ToList();
+        Assert.AreEqual(
+            0,
+            unprefixedCatchAllTriggers.Count,
+            $"API functions must not register unprefixed catch-all routes: {string.Join(", ", unprefixedCatchAllTriggers.Select(item => item.Method.Name))}");
+
+        var calculateTriggers = httpTriggers
+            .Where(item => item.Trigger.Route?.StartsWith("Calculate", StringComparison.OrdinalIgnoreCase) == true)
+            .ToList();
+        Assert.AreEqual(1, calculateTriggers.Count, "Only the fixed-path Calculate POST trigger may be registered");
+
+        var calculateTrigger = calculateTriggers.Single().Trigger;
+        Assert.AreEqual("Calculate/{calculatorName}", calculateTrigger.Route);
+        CollectionAssert.AreEquivalent(
+            new[] { "post" },
+            (calculateTrigger.Methods ?? Array.Empty<string>())
+                .Select(method => method.ToLowerInvariant())
+                .ToArray());
+    }
+
+    [TestMethod]
     [DoNotParallelize]
     public async Task PostLogsCalculatorNameAndSafeCorrelationIdOnly()
     {
