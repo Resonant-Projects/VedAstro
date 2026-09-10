@@ -88,7 +88,7 @@ namespace VedAstro.Library
         public static bool UseVedhankaInGochara { get; set; } = true;
 
         /// <summary>
-        /// Defaults to true Rahu & Ketu positions.
+        /// Defaults to true-node Rahu & Ketu positions.
         /// Set to true to use mean node.
         /// Correlates to Swiss Ephemeris, SE_TRUE_NODE & SE_MEAN_NODE
         /// </summary>
@@ -5938,6 +5938,11 @@ namespace VedAstro.Library
 
         }
 
+        private static CacheKey NodeLongitudeCacheKey(string function, Time time, PlanetName planetName) =>
+            planetName == Rahu || planetName == Ketu
+                ? new CacheKey(function, time, planetName, Ayanamsa, UseMeanRahuKetu)
+                : new CacheKey(function, time, planetName, Ayanamsa);
+
         /// <summary>
         /// Get fixed longitude used in western systems, connects SwissEph Library with VedAstro
         /// NOTE This method connects SwissEph Library with VedAstro Library
@@ -5946,7 +5951,7 @@ namespace VedAstro.Library
         {
 
             //CACHE MECHANISM
-            return CacheManager.GetCache(new CacheKey(nameof(PlanetSayanaLongitude), time, planetName, Ayanamsa), _getPlanetSayanaLongitude);
+            return CacheManager.GetCache(NodeLongitudeCacheKey(nameof(PlanetSayanaLongitude), time, planetName), _getPlanetSayanaLongitude);
 
 
             //UNDERLYING FUNCTION
@@ -6000,7 +6005,7 @@ namespace VedAstro.Library
         {
 
             //CACHE MECHANISM
-            return CacheManager.GetCache(new CacheKey(nameof(PlanetNirayanaLongitude), time, planetName, Ayanamsa), _getPlanetNirayanaLongitude);
+            return CacheManager.GetCache(NodeLongitudeCacheKey(nameof(PlanetNirayanaLongitude), time, planetName), _getPlanetNirayanaLongitude);
 
 
             //UNDERLYING FUNCTION
@@ -6153,7 +6158,7 @@ namespace VedAstro.Library
         {
 
             //CACHE MECHANISM
-            return CacheManager.GetCache(new CacheKey(nameof(PlanetEphemerisLongitude), time, planetName, Ayanamsa), _getPlanetSayanaLongitude);
+            return CacheManager.GetCache(NodeLongitudeCacheKey(nameof(PlanetEphemerisLongitude), time, planetName), _getPlanetSayanaLongitude);
 
 
             //UNDERLYING FUNCTION
