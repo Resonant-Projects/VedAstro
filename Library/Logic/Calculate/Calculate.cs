@@ -88,11 +88,11 @@ namespace VedAstro.Library
         public static bool UseVedhankaInGochara { get; set; } = true;
 
         /// <summary>
-        /// Defaults to mean Rahu & Ketu positions for a more even value,
-        /// set to false to use true node.
+        /// Defaults to true Rahu & Ketu positions.
+        /// Set to true to use mean node.
         /// Correlates to Swiss Ephemeris, SE_TRUE_NODE & SE_MEAN_NODE
         /// </summary>
-        public static bool UseMeanRahuKetu { get; set; } = true;
+        public static bool UseMeanRahuKetu { get; set; } = false;
 
         private static readonly HttpClient AnyScaleHttpClient = new()
         {
