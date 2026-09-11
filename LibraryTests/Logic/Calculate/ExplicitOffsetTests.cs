@@ -27,8 +27,8 @@ public class ExplicitOffsetTests
         {
             Calculate.Ayanamsa = SwissEphNet.SwissEph.SE_SIDM_LAHIRI;
             var longitude = Calculate.PlanetNirayanaLongitude(PlanetName.Moon, time);
-            // Independent Swiss Ephemeris, Lahiri, 1980-05-28T00:00:00Z.
-            Assert.AreEqual(201.3489721, longitude.TotalDegrees, 0.01);
+            // pyswisseph 2.10.3.2 / Swiss 2.10.03, SWIEPH | SIDEREAL, Lahiri, UTC.
+            Assert.AreEqual(201.34893154648788, longitude.TotalDegrees, 0.01);
         }
         finally
         {
