@@ -2376,6 +2376,18 @@ namespace VedAstro.Library
             {
                 planet = SwissEph.SE_SATURN;
             }
+            else if (planetName == PlanetName.Uranus)
+            {
+                planet = SwissEph.SE_URANUS;
+            }
+            else if (planetName == PlanetName.Neptune)
+            {
+                planet = SwissEph.SE_NEPTUNE;
+            }
+            else if (planetName == PlanetName.Pluto)
+            {
+                planet = SwissEph.SE_PLUTO;
+            }
             else if (planetName == PlanetName.Earth)
             {
                 planet = SwissEph.SE_EARTH;

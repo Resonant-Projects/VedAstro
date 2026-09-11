@@ -2586,6 +2586,11 @@ namespace VedAstro.Library
 
         public static List<Tuple<Time, Time, ZodiacName, PlanetName>> PlanetSignTransit(Time startTime, Time endTime, PlanetName planetName)
         {
+            if (planetName == null || planetName == PlanetName.Empty)
+                throw new ArgumentException("A recognized planet is required.", nameof(planetName));
+            if (endTime < startTime)
+                throw new ArgumentException("End time must not precede start time.", nameof(endTime));
+
             //make slices to scan
             var accuracyInHours = 0.05; // 3 minute
             var timeSlices = Time.GetTimeListFromRange(startTime, endTime, accuracyInHours);
@@ -2614,6 +2619,11 @@ namespace VedAstro.Library
                 //update value for next check
                 previousZodiacName = tempZodiacName;
             }
+
+            // Include the sign still active at the requested end, even when no ingress occurred.
+            // A transition exactly at the end already closed the preceding interval.
+            if (startTimeSlice < endTime)
+                returnList.Add(new Tuple<Time, Time, ZodiacName, PlanetName>(startTimeSlice, endTime, previousZodiacName, planetName));
 
             return returnList;
 

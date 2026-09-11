@@ -51,7 +51,10 @@ namespace VedAstro.Library
             Arthaprahaara,
             Yamaghantaka,
             Gulika,
-            Maandi
+            Maandi,
+            Uranus,
+            Neptune,
+            Pluto
         }
 
         //CONST FIELDS
@@ -62,6 +65,9 @@ namespace VedAstro.Library
         public static readonly PlanetName Jupiter = new PlanetName(PlanetNameEnum.Jupiter);
         public static readonly PlanetName Venus = new PlanetName(PlanetNameEnum.Venus);
         public static readonly PlanetName Saturn = new PlanetName(PlanetNameEnum.Saturn);
+        public static readonly PlanetName Uranus = new PlanetName(PlanetNameEnum.Uranus);
+        public static readonly PlanetName Neptune = new PlanetName(PlanetNameEnum.Neptune);
+        public static readonly PlanetName Pluto = new PlanetName(PlanetNameEnum.Pluto);
         public static readonly PlanetName Earth = new PlanetName(PlanetNameEnum.Earth);
         public static readonly PlanetName Dhuma = new PlanetName(PlanetNameEnum.Dhuma);
         public static readonly PlanetName Vyatipaata = new PlanetName(PlanetNameEnum.Vyatipaata);
@@ -159,6 +165,12 @@ namespace VedAstro.Library
                     return Jupiter;
                 case "venus":
                     return Venus;
+                case "uranus":
+                    return Uranus;
+                case "neptune":
+                    return Neptune;
+                case "pluto":
+                    return Pluto;
                 case "saturn":
                     return Saturn;
                 case "ketu":
@@ -206,6 +218,9 @@ namespace VedAstro.Library
                 case "mercury": { parsed = PlanetName.Mercury; return true; }
                 case "jupiter": { parsed = PlanetName.Jupiter; return true; }
                 case "venus": { parsed = PlanetName.Venus; return true; }
+                case "uranus": { parsed = PlanetName.Uranus; return true; }
+                case "neptune": { parsed = PlanetName.Neptune; return true; }
+                case "pluto": { parsed = PlanetName.Pluto; return true; }
                 case "saturn": { parsed = PlanetName.Saturn; return true; }
                 case "rahu": { parsed = PlanetName.Rahu; return true; }
                 case "ketu": { parsed = PlanetName.Ketu; return true; }
