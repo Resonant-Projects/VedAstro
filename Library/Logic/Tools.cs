@@ -882,7 +882,7 @@ namespace VedAstro.Library
 
         /// <summary>
         /// Converts raw call from API via URL to parsed Time
-        /// Note: Timezone/Offset auto get from API based on location ONLY if set to +00:00
+        /// Note: Resolve the timezone from the location only when no valid offset was supplied.
         /// </summary>
         public static async Task<Time> ParseTime(string locationName,
             string hhmmStr,
@@ -917,9 +917,9 @@ namespace VedAstro.Library
                 geoLocation = Calculate.AddressToGeoLocation(locationName);
             }
 
-            //if timezone offset is +00:00/invalid the do API search else use as inputed by caller
+            // An explicit zero offset identifies UTC and must preserve the caller's instant.
             var parsedTimezone = Tools.StringToTimezone(offsetStr);
-            if (parsedTimezone == null || parsedTimezone == TimeSpan.Zero)
+            if (parsedTimezone == null)
             {
                 //compile the time string into standard format
                 //NOTE : offset hard set to UTC 0, because not used, only format filler (will be overriden later)
